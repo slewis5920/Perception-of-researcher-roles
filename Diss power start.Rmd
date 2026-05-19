@@ -1,0 +1,131 @@
+---
+title: "diss"
+author: "Savannah Lewis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+# -------------------------
+# d -> eta2 -> f2 and participant counts (design-effect method)
+# -------------------------
+# install packages if needed
+if (!requireNamespace("pwr", quietly = TRUE)) install.packages("pwr")
+if (!requireNamespace("sjstats", quietly = TRUE)) install.packages("sjstats")
+
+library(pwr)      # pwr.f2.test
+library(sjstats)  # design_effect
+library(dplyr)
+library(tibble)
+library(purrr)
+```
+
+```{r}
+d = 0.24                # your Cohen's d
+alpha_family = 0.05
+k_planned =   4        # number of planned comparisons (Bonferroni)
+alpha_adj = alpha_family / k_planned   # adjusted alpha
+power_target = 0.80
+cluster_size = 12       # 6 QRPs x 2 roles = 12 vignette rows per participant
+icc_grid = c(0.20, 0.35, 0.40, 0.45, 0.50)   # ICC sensitivity grid
+```
+
+
+```{r}
+d2 = d^2
+f2_from_d = d2 / 5             # shortcut: f^2 = d^2 / 5 
+eta2_from_d = d2 / (d2 + 5)    # eta^2 = d^2 / (d^2 + 5)
+
+cat("Inputs:\n")
+cat("  d =", d, "\n")
+cat("  d^2 =", round(d2, 5), "\n")
+cat("Conversions:\n")
+cat("  f^2 (from d) =", round(f2_from_d, 6), "\n")
+cat("  eta^2 (from d) =", round(eta2_from_d, 6), "\n\n")
+```
+
+
+```{r}
+compute_required = function(f2, icc, alpha = alpha_adj, power = power_target, m = cluster_size){
+  # numerator df for pairwise contrast
+  u = 1
+  pw = pwr.f2.test(u = u, f2 = f2, sig.level = alpha, power = power)
+  v = pw$v            # denominator df (flat-design requirement)
+  deff = design_effect(n = m, icc = icc)   # 1 + (m-1)*ICC
+  total_long_rows = v * deff
+  participants_needed = ceiling(total_long_rows / m)
+  tibble::tibble(
+    f2 = f2, icc = icc, denom_df_v = round(v, 1),
+    design_effect = round(deff, 3),
+    total_long_rows = round(total_long_rows),
+    participants_needed = participants_needed
+  )
+}
+```
+
+
+```{r}
+results = purrr::map_dfr(icc_grid, ~compute_required(f2_from_d, icc = .x))
+
+# print table
+results = dplyr::mutate(results, scenario = paste0("d=", d, " -> f2=", signif(f2_from_d, 4)))
+select_cols = c("scenario","icc","f2","denom_df_v","design_effect","total_long_rows","participants_needed")
+print(dplyr::select(results, dplyr::all_of(select_cols)))
+```
+
+AFTER PRELIM TESTING 3 VIGNETTES POWER. DECIDED TO GO DOWN TO THREE FOR BETTER SEPARATION OF SEVERITY.
+
+
+
+```{r}
+d = 0.24                # your Cohen's d
+alpha_family = 0.05
+k_planned =   4        # number of planned comparisons (Bonferroni)
+alpha_adj = alpha_family / k_planned   # adjusted alpha
+power_target = 0.80
+cluster_size = 6       # 3 QRPs x 2 roles = 6 vignette rows per participant
+icc_grid = c(0.20, 0.35, 0.40, 0.45, 0.50)   # ICC sensitivity grid
+```
+
+
+```{r}
+d2 = d^2
+f2_from_d = d2 / 5            # shortcut: f^2 = d^2 / 5 (for pairwise contrast)
+eta2_from_d = d2 / (d2 + 5)    # eta^2 = d^2 / (d^2 + 5)
+
+cat("Inputs:\n")
+cat("  d =", d, "\n")
+cat("  d^2 =", round(d2, 5), "\n")
+cat("Conversions:\n")
+cat("  f^2 (from d) =", round(f2_from_d, 6), "\n")
+cat("  eta^2 (from d) =", round(eta2_from_d, 6), "\n\n")
+```
+
+```{r}
+compute_required = function(f2, icc, alpha = alpha_adj, power = power_target, m = cluster_size){
+  # numerator df for pairwise contrast
+  u = 1
+  pw = pwr.f2.test(u = u, f2 = f2, sig.level = alpha, power = power)
+  v = pw$v            # denominator df (flat-design requirement)
+  deff = design_effect(n = m, icc = icc)   # 1 + (m-1)*ICC
+  total_long_rows = v * deff
+  participants_needed = ceiling(total_long_rows / m)
+  tibble::tibble(
+    f2 = f2, icc = icc, denom_df_v = round(v, 1),
+    design_effect = round(deff, 3),
+    total_long_rows = round(total_long_rows),
+    participants_needed = participants_needed
+  )
+}
+```
+
+
+```{r}
+results = purrr::map_dfr(icc_grid, ~compute_required(f2_from_d, icc = .x))
+
+# print table
+results = dplyr::mutate(results, scenario = paste0("d=", d, " -> f2=", signif(f2_from_d, 4)))
+select_cols = c("scenario","icc","f2","denom_df_v","design_effect","total_long_rows","participants_needed")
+print(dplyr::select(results, dplyr::all_of(select_cols)))
+
+```

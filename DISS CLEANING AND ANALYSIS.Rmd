@@ -5,8 +5,6 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-
-
 ```{r}
 # -------------------------
 # d -> eta2 -> f2 and participant counts (design-effect method)
@@ -29,134 +27,277 @@ library(effectsize)
 library(broom)
 library(knitr)
 library(kableExtra)
-library(stringr)
+library(lattice)
+library(nlme)
+library(lubridate)
 ```
 LOAD DATA 
 ```{r data-load}
 library(here)
-data_path =  here::here("Diss_Subset.csv")
-diss.pilot =  read.csv(data_path)
+data_path <- here::here("Diss_Subset.csv")
+diss.pilot <- read.csv(data_path)
 ```
 
 LET'S START CLEANING 
 
 ```{r}
 #make all the columns lowercase to help with coding 
-names(diss.pilot) = tolower(names(diss.pilot))
-
-
-#time to make this words into numbers :)
-
-diss.pilot = diss.pilot %>%
-  mutate(consent.form. = case_when(
-    consent.form. == "Yes, I consent" ~ 1,
-    consent.form. == "No, I will leave the survey now" ~ 0,
-    TRUE ~ NA_real_
-  ))
-
-diss.pilot = diss.pilot %>%
-  mutate(across(
-    matches("(hon|sin|eth|like|app|con)$") & where(is.character),
-    ~ as.numeric(str_extract(.x, "^\\d+"))
-  ))
-
-
+names(diss.pilot) =tolower(names(diss.pilot))
 ```
 
-This is exclusion criteria only
 ```{r}
-
-# Initial data count to see what in the data set
-initial_count = nrow(diss.pilot)
+# Initial data count
+initial_count <- nrow(diss.pilot)
 print(initial_count)
 
+# Clean recordeddate
+diss.pilot$recordeddate <- str_squish(as.character(diss.pilot$recordeddate))
+
+# Parse date-only column
+diss.pilot$created_date <- mdy(diss.pilot$recordeddate)
+
+# Filter by cutoff date
+cutoff_date <- as.Date("2026-01-27")
+filtered_by_date <- diss.pilot %>%
+  filter(!is.na(created_date) & created_date >= cutoff_date)
+
+count_by_date <- nrow(filtered_by_date)
+print(count_by_date)
+
 # Filter by consent
-filtered_by_consent = diss.pilot %>%
-  filter(consent.form. == 1)
-count_by_consent = nrow(filtered_by_consent)
+filtered_by_consent <- filtered_by_date %>%
+  filter(consent.form. == "Yes, I consent")
 
+count_by_consent <- nrow(filtered_by_consent)
+
+# Filter by duration (exclude under 420 seconds)
+filtered_by_duration <- filtered_by_consent %>%
+  filter(!is.na(duration..in.seconds.) & duration..in.seconds. >= 420)
+
+count_by_duration <- nrow(filtered_by_duration)
+
+# Exclude participants under 18
+filtered_by_age <- filtered_by_duration %>%
+  filter(is.na(old) | old >= 18)
+
+count_by_age <- nrow(filtered_by_age)
+
+# Final count
+final_count <- nrow(filtered_by_age)
+
+# Summary table
+count_summary <- data.frame(
+  Step = c(
+    "Initial",
+    "After Date Filter",
+    "After Consent Filter",
+    "After Duration Filter",
+    "After Age Filter",
+    "Final"
+  ),
+  Count = c(
+    initial_count,
+    count_by_date,
+    count_by_consent,
+    count_by_duration,
+    count_by_age,
+    final_count
+  )
+)
+
+print(count_summary)
+
+# Print counts
+cat("Total rows in diss.pilot:", initial_count, "\n")
+cat("Rows after filtering by date:", count_by_date, "\n")
+cat("Rows after filtering by consent:", count_by_consent, "\n")
+cat("Rows after filtering by duration:", count_by_duration, "\n")
+cat("Rows after excluding participants under 18:", count_by_age, "\n")
+cat("Final rows:", final_count, "\n")
+```
+```{r}
+attr_dat <- filtered_by_age %>%
+  select(
+    responseid,
+    minsmart, minbetter, mincreative, minrather, minshould, minregard, mintyp, minkeep, minget,
+    modsmart, modbett, modcreat, modrath, modshou, modreg, modtyp, modkeep, modget,
+    majsmart, majbet, majcreat, majrath, majshould, majreg, majtyp, majkeep, majget
+  )
+```
+
+```{r}
+attr_long <- attr_dat %>%
+  pivot_longer(
+    cols = -responseid,
+    names_to = "raw_item",
+    values_to = "choice_raw"
+  )
+```
+
+```{r}
+attr_long <- attr_long %>%
+  mutate(
+    severity = case_when(
+      str_detect(raw_item, "^min") ~ "minor",
+      str_detect(raw_item, "^mod") ~ "moderate",
+      str_detect(raw_item, "^maj") ~ "major",
+      TRUE ~ NA_character_
+    ),
+    item_stub = str_remove(raw_item, "^(min|mod|maj)"),
+    attribute = case_when(
+      item_stub %in% c("smart") ~ "smarter",
+      item_stub %in% c("better", "bett") ~ "better_researcher",
+      item_stub %in% c("creative", "creat") ~ "creative",
+      item_stub %in% c("rather", "rath") ~ "rather_be",
+      item_stub %in% c("should", "shou") ~ "should_be",
+      item_stub %in% c("regard", "reg") ~ "celebrated",
+      item_stub %in% c("typ") ~ "typical",
+      item_stub %in% c("keep") ~ "job_security",
+      item_stub %in% c("get") ~ "job_outcome",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+```{r}
+head(attr_long, 20)
+table(attr_long$severity, useNA = "ifany")
+table(attr_long$attribute, useNA = "ifany")
+```
+
+```{r}
+attr_long2 <- attr_long %>%
+  tidyr::crossing(researcher = c("investigator", "inspector"))
+```
+
+```{r}
+head(attr_long2, 20)
+dim(attr_long)
+dim(attr_long2)
+```
+```{r}
+attr_long2 <- attr_long2 %>%
+  mutate(
+    chosen = case_when(
+      str_detect(choice_raw, "^reported researcher") & researcher == "investigator" ~ 1,
+      str_detect(choice_raw, "^reporting researcher") & researcher == "inspector" ~ 1,
+      str_detect(choice_raw, "^neither") ~ 0,
+      TRUE ~ 0
+    )
+  )
+```
+
+```{r}
+head(attr_long2, 20)
+table(attr_long2$chosen, useNA = "ifany")
+table(attr_long2$researcher, attr_long2$chosen)
 ```
 
 
-Let's get rid of unnecessary columns
 ```{r}
-#this makes the new score dataset
-Diss.subsetscoring = diss.pilot%>%
-  select(consent.form.,
-  khon, ksin, keth, klike, kapp, kcon,
-  shon, ssin, seth, slike, sapp,
-  minsmart, minbetter, mincreative, minrather,
-  minshould, minregard, mintyp, minkeep, minget,
-  hhon, hsin, heth,
-  hhon, hsin, heth, hlike, happ, hcon,
-  fhon, fsin, feth, flike, fapp,
-  modsmart, modbett, modcreat, modrath,
-  modshou, modreg, modtyp, modkeep, modget,
-  xhon, xsin, xeth, xlike, xapp, xcon,
-  yhon, ysin, yeth, ylike, yapp,
-  majsmart, majbet, majcreat, majrath,
-  majshould, majreg, majtyp, majkeep, majget,
-  attention1,
-  ethnic, race, race.other, gender.identity,
-  q78, education, political, sex.orientation,
-  q92, old, religion, religion.other,
-  id)
-
-         
-``` 
-
-
-Demographics
-
-```{r}
-#gets a table for age and prints unique answers 
-Diss.subsetscoring$age = as.numeric(Diss.subsetscoring$old)
-unique_age = unique(Diss.subsetscoring$old)
-#print(unique_age)
-
-mean_age = mean(Diss.subsetscoring$old, na.rm = TRUE)
-#print(mean_age)
-
-#gets a table participants that consent for all participants before exclusions
-consent_table.OG = table(diss.pilot$consent.form.)
-#print(consent_table.OG)
-
-#gets a table participants that consent in the score dataset
-consent_table = table(Diss.subsetscoring$consent.form.)
-#print(consent_table)
-
-#gets a table for each demo questions
-gender_table = table(Diss.subsetscoring$gender.identity)
-ethnicity_table = table(Diss.subsetscoring$ethnic)
-SO_table = table(Diss.subsetscoring$sex.orientation)
-Race_table = table(Diss.subsetscoring$race)
-politcal_table = table(Diss.subsetscoring$political)
-religion_table = table(Diss.subsetscoring$religion)
-education_table = table(Diss.subsetscoring$education)
-
-#prints results for each demo questions
-#print(gender_table)
-#print(ethnicity_table)
-#print(SO_table)
-#print(Race_table)
-#print(politcal_table)
-#print(religion_table)
-#print(education_table)
-
-
-#shows all unique answers to the "other" options for each demo the prints them 
-unique_rel= unique(Diss.subsetscoring$religion.other)
-#print(unique_rel)
-
-#shows all unique answers to the "other" options for each demo the prints them 
-unique_race = unique(Diss.subsetscoring$race.other)
-#print(unique_race)
-
-#shows all unique answers to the "other" options for each demo the prints them 
-unique_sexual_orientation = unique(Diss.subsetscoring$q92)
-#print(unique_sexual_orientation)
-
-#shows all unique answers to the "other" options for each demo the prints them 
-unique_gender = unique(Diss.subsetscoring$q78)
-#print(unique_gender)
+attr_model_dat <- attr_long2 %>%
+  mutate(
+    researcher_ec = if_else(researcher == "inspector", 1, -1),
+    severity_num = case_when(
+      severity == "minor" ~ -1,
+      severity == "moderate" ~ 0,
+      severity == "major" ~ 1
+    ),
+    responseid = factor(responseid),
+    researcher = factor(researcher, levels = c("investigator", "inspector")),
+    severity = factor(severity, levels = c("minor", "moderate", "major")),
+    attribute = factor(
+      attribute,
+      levels = c(
+        "smarter",
+        "better_researcher",
+        "creative",
+        "rather_be",
+        "should_be",
+        "celebrated",
+        "typical",
+        "job_security",
+        "job_outcome"
+      )
+    ),
+    vignette_id = factor(severity)
+  )
 ```
+
+```{r}
+str(attr_model_dat)
+table(attr_model_dat$researcher)
+table(attr_model_dat$severity)
+table(attr_model_dat$attribute)
+table(attr_model_dat$researcher_ec)
+table(attr_model_dat$severity_num)
+```
+
+```{r}
+library(lme4)
+install.packages("lmerTest")
+library(lmerTest)
+
+A1 <- glmer(
+  chosen ~ researcher_ec + attribute +
+    (1 | responseid) + (1 | vignette_id),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa")
+)
+```
+
+```{r}
+# chosen = 0 (not selected), 1 (selected)
+summary(A1)
+```
+
+```{r}
+# A2 tests whether choice differs by severity, controlling for attribute
+# chosen = 0 (not selected), 1 (selected)
+
+A2 <- glmer(
+  chosen ~ attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A2)
+```
+
+```{r}
+# A3: Tests whether choice differs by BOTH researcher and severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A3 <- glmer(
+  chosen ~ researcher_ec + attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A3)
+```
+
+```{r}
+# A4: Tests whether the effect of researcher depends on severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A4 <- glmer(
+  chosen ~ researcher_ec * severity_num + attribute +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A4)
+```
+

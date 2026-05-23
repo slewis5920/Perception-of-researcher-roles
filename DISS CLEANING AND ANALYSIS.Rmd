@@ -34,31 +34,31 @@ library(lubridate)
 LOAD DATA 
 ```{r data-load}
 library(here)
-data_path <- here::here("Diss_Subset.csv")
-diss.pilot <- read.csv(data_path)
+data_path <- here::here("Diss_full.csv")
+diss.full <- read.csv(data_path)
 ```
 
 LET'S START CLEANING 
 
 ```{r}
 #make all the columns lowercase to help with coding 
-names(diss.pilot) =tolower(names(diss.pilot))
+names(diss.full) =tolower(names(diss.full))
 ```
 
 ```{r}
 # Initial data count
-initial_count <- nrow(diss.pilot)
+initial_count <- nrow(diss.full)
 print(initial_count)
 
 # Clean recordeddate
-diss.pilot$recordeddate <- str_squish(as.character(diss.pilot$recordeddate))
+diss.full$recordeddate <- str_squish(as.character(diss.full$recordeddate))
 
 # Parse date-only column
-diss.pilot$created_date <- mdy(diss.pilot$recordeddate)
+diss.full$created_date = mdy_hm(diss.full$recordeddate)
 
 # Filter by cutoff date
 cutoff_date <- as.Date("2026-01-27")
-filtered_by_date <- diss.pilot %>%
+filtered_by_date <- diss.full %>%
   filter(!is.na(created_date) & created_date >= cutoff_date)
 
 count_by_date <- nrow(filtered_by_date)
@@ -78,7 +78,7 @@ count_by_duration <- nrow(filtered_by_duration)
 
 # Exclude participants under 18
 filtered_by_age <- filtered_by_duration %>%
-  filter(is.na(old) | old >= 18)
+  filter(is.na(age) | age >= 18)
 
 count_by_age <- nrow(filtered_by_age)
 
@@ -108,7 +108,7 @@ count_summary <- data.frame(
 print(count_summary)
 
 # Print counts
-cat("Total rows in diss.pilot:", initial_count, "\n")
+cat("Total rows in diss.full:", initial_count, "\n")
 cat("Rows after filtering by date:", count_by_date, "\n")
 cat("Rows after filtering by consent:", count_by_consent, "\n")
 cat("Rows after filtering by duration:", count_by_duration, "\n")

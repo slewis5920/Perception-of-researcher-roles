@@ -2,7 +2,9 @@
 title: "Diss cleaning"
 author: "SCL"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r}
@@ -30,19 +32,26 @@ library(kableExtra)
 library(lattice)
 library(nlme)
 library(lubridate)
+library(lme4)
+library(lmerTest)
 ```
-LOAD DATA 
+
+LOAD DATA
+
 ```{r data-load}
 library(here)
 data_path <- here::here("Diss_full.csv")
 diss.full <- read.csv(data_path)
 ```
 
-LET'S START CLEANING 
+LET'S START CLEANING
 
 ```{r}
 #make all the columns lowercase to help with coding 
 names(diss.full) =tolower(names(diss.full))
+names(diss.full) <- iconv(names(diss.full), from = "", to = "UTF-8", sub = "")
+names(diss.full) <- gsub("consent.*", "consent", names(diss.full))
+
 ```
 
 ```{r}
@@ -65,8 +74,8 @@ count_by_date <- nrow(filtered_by_date)
 print(count_by_date)
 
 # Filter by consent
-filtered_by_consent <- filtered_by_date %>%
-  filter(consent.form. == "Yes, I consent")
+filtered_by_consent = filtered_by_date %>%
+  filter(consent == "Yes, I consent")
 
 count_by_consent <- nrow(filtered_by_consent)
 
@@ -82,6 +91,28 @@ filtered_by_age <- filtered_by_duration %>%
 
 count_by_age <- nrow(filtered_by_age)
 
+
+# Exclude no-variability: participants who gave identical responses across
+# all trust and likeability items — uses apply() to avoid rowwise() issues
+trust_like_cols = c("khon","ksin","keth","klike","kapp",
+                    "shon","ssin","seth","slike","sapp",
+                    "hhon","hsin","heth","hlike","happ",
+                    "fhon","fsin","feth","flike","fapp",
+                    "xhon","xsin","xeth","xlike","xapp",
+                    "yhon","ysin","yeth","ylike","yapp")
+
+tl_matrix = filtered_by_age %>%
+  select(all_of(trust_like_cols)) %>%
+  mutate(across(everything(), as.numeric))
+
+has_variability = apply(tl_matrix, 1, function(row) n_distinct(na.omit(row)) > 1)
+filtered_by_variability = filtered_by_age[has_variability, ]
+count_by_variability = nrow(filtered_by_variability)
+
+# Exclude attention check failures (attention1 == 2 is correct response)
+filtered_by_attention = filtered_by_variability %>%
+  filter(attention1 == 2)
+count_by_attention = nrow(filtered_by_attention)
 # Final count
 final_count <- nrow(filtered_by_age)
 
@@ -115,6 +146,7 @@ cat("Rows after filtering by duration:", count_by_duration, "\n")
 cat("Rows after excluding participants under 18:", count_by_age, "\n")
 cat("Final rows:", final_count, "\n")
 ```
+
 ```{r}
 attr_dat <- filtered_by_age %>%
   select(
@@ -175,6 +207,7 @@ head(attr_long2, 20)
 dim(attr_long)
 dim(attr_long2)
 ```
+
 ```{r}
 attr_long2 <- attr_long2 %>%
   mutate(
@@ -192,7 +225,6 @@ head(attr_long2, 20)
 table(attr_long2$chosen, useNA = "ifany")
 table(attr_long2$researcher, attr_long2$chosen)
 ```
-
 
 ```{r}
 attr_model_dat <- attr_long2 %>%
@@ -234,10 +266,6 @@ table(attr_model_dat$severity_num)
 ```
 
 ```{r}
-library(lme4)
-install.packages("lmerTest")
-library(lmerTest)
-
 A1 <- glmer(
   chosen ~ researcher_ec + attribute +
     (1 | responseid) + (1 | vignette_id),
@@ -301,3 +329,690 @@ A4 <- glmer(
 summary(A4)
 ```
 
+Pivot the dataset
+
+```{r}
+attr_long <- attr_dat %>%
+  pivot_longer(
+    cols = -responseid,
+    names_to = "raw_item",
+    values_to = "choice_raw"
+  )
+```
+
+find the correct columns to attribute to the variables
+
+```{r}
+attr_long <- attr_long %>%
+  mutate(
+    severity = case_when(
+      str_detect(raw_item, "^min") ~ "minor",
+      str_detect(raw_item, "^mod") ~ "moderate",
+      str_detect(raw_item, "^maj") ~ "major",
+      TRUE ~ NA_character_
+    ),
+    item_stub = str_remove(raw_item, "^(min|mod|maj)"),
+    attribute = case_when(
+      item_stub %in% c("smart") ~ "smarter",
+      item_stub %in% c("better", "bett") ~ "better_researcher",
+      item_stub %in% c("creative", "creat") ~ "creative",
+      item_stub %in% c("rather", "rath") ~ "rather_be",
+      item_stub %in% c("should", "shou") ~ "should_be",
+      item_stub %in% c("regard", "reg") ~ "celebrated",
+      item_stub %in% c("typ") ~ "typical",
+      item_stub %in% c("keep") ~ "job_security",
+      item_stub %in% c("get") ~ "job_outcome",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+Check to make sure it looks correcy and get a count
+
+```{r}
+head(attr_long, 20)
+table(attr_long$severity, useNA = "ifany")
+table(attr_long$attribute, useNA = "ifany")
+```
+
+set roles
+
+```{r}
+attr_long2 <- attr_long %>%
+  tidyr::crossing(researcher = c("investigator", "inspector"))
+```
+
+figure out how many rows for the data
+
+```{r}
+head(attr_long2, 20)
+dim(attr_long)
+dim(attr_long2)
+```
+
+find the correct columns and attruibute them to role type
+
+```{r}
+attr_long2 <- attr_long2 %>%
+  mutate(
+    chosen = case_when(
+      str_detect(choice_raw, "^reported researcher") & researcher == "investigator" ~ 1,
+      str_detect(choice_raw, "^reporting researcher") & researcher == "inspector" ~ 1,
+      str_detect(choice_raw, "^neither") ~ 0,
+      TRUE ~ 0
+    )
+  )
+```
+
+Check to make sure it looks correcy and get a count
+
+```{r}
+head(attr_long2, 20)
+table(attr_long2$chosen, useNA = "ifany")
+table(attr_long2$researcher, attr_long2$chosen)
+```
+
+set up the data fro the models
+
+```{r}
+attr_model_dat <- attr_long2 %>%
+  mutate(
+    researcher_ec = if_else(researcher == "inspector", 1, -1),
+    severity_num = case_when(
+      severity == "minor" ~ -1,
+      severity == "moderate" ~ 0,
+      severity == "major" ~ 1
+    ),
+    responseid = factor(responseid),
+    researcher = factor(researcher, levels = c("investigator", "inspector")),
+    severity = factor(severity, levels = c("minor", "moderate", "major")),
+    attribute = factor(
+      attribute,
+      levels = c(
+        "smarter",
+        "better_researcher",
+        "creative",
+        "rather_be",
+        "should_be",
+        "celebrated",
+        "typical",
+        "job_security",
+        "job_outcome"
+      )
+    ),
+    vignette_id = factor(severity)
+  )
+```
+
+creat some model tables
+
+```{r}
+str(attr_model_dat)
+table(attr_model_dat$researcher)
+table(attr_model_dat$severity)
+table(attr_model_dat$attribute)
+table(attr_model_dat$researcher_ec)
+table(attr_model_dat$severity_num)
+
+```
+
+Run our first model in the model build for hypo 1
+
+```{r}
+
+A1 <- glmer(
+  chosen ~ researcher_ec + attribute +
+    (1 | responseid) + (1 | vignette_id),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa")
+)
+```
+
+summarize our baseline
+
+```{r}
+# chosen = 0 (not selected), 1 (selected)
+summary(A1)
+```
+
+run model two
+
+```{r}
+# A2 tests whether choice differs by severity, controlling for attribute
+# chosen = 0 (not selected), 1 (selected)
+
+A2 <- glmer(
+  chosen ~ attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A2)
+```
+
+run model three
+
+```{r}
+# A3: Tests whether choice differs by BOTH researcher and severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A3 <- glmer(
+  chosen ~ researcher_ec + attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A3)
+```
+
+run model four
+
+```{r}
+# A4: Tests whether the effect of researcher depends on severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A4 <- glmer(
+  chosen ~ researcher_ec * severity_num + attribute +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A4)
+```
+
+------------------------------------------------------------------------
+
+# ============================================================
+
+# TRUST & LIKEABILITY ANALYSIS (RQ1, RQ2) + TRUENESS (RQ3)
+
+# ============================================================
+
+## STEP 1: Build the long-format trust/likeability/trueness dataset
+
+```{r build-trust-long}
+# ── Vignette metadata ──────────────────────────────────────────────────────
+# Each vignette pair: investigator (inv) and inspector (insp)
+# Severity: minor = vignette K/S, moderate = H/F, major = X/Y
+# Trust items   : hon, sin, eth  (honest, sincere, ethical)
+# Likeability   : like, app      (likeable, approachable)
+# Trueness (conf): investigator only, 1 item per vignette
+
+vignette_map = list(
+  list(vig_id = "minor",    role = "investigator",
+       hon = "khon", sin = "ksin",  eth = "keth",
+       like = "klike",  app = "kapp",  conf = "kcon"),
+  list(vig_id = "minor",    role = "inspector",
+       hon = "shon",    sin = "ssin",  eth = "seth",
+       like = "slike",  app = "sapp",  conf = NA),
+  list(vig_id = "moderate", role = "investigator",
+       hon = "hhon",    sin = "hsin",  eth = "heth",
+       like = "hlike",  app = "happ",  conf = "hcon"),
+  list(vig_id = "moderate", role = "inspector",
+       hon = "fhon",    sin = "fsin",  eth = "feth",
+       like = "flike",  app = "fapp",  conf = NA),
+  list(vig_id = "major",    role = "investigator",
+       hon = "xhon",   sin = "xsin",  eth = "xeth",
+       like = "xlike",  app = "xapp",  conf = "xcon"),
+  list(vig_id = "major",    role = "inspector",
+       hon = "yhon",    sin = "ysin",  eth = "yeth",
+       like = "ylike",  app = "yapp",  conf = NA)
+)
+
+# ── Helper: extract numeric value from labelled string ─────────────────────
+parse_num = function(x) as.numeric(str_extract(as.character(x), "^\\d"))
+
+# ── Build one row per participant × vignette × role ──────────────────────
+tl_rows = map_dfr(vignette_map, function(v) {
+  filtered_by_age %>%                          # use cleaned dataset
+    transmute(
+      responseid,
+      vig_id   = v$vig_id,
+      role     = v$role,
+      hon_raw  = parse_num(.data[[v$hon]]),
+      sin_raw  = parse_num(.data[[v$sin]]),
+      eth_raw  = parse_num(.data[[v$eth]]),
+      like_raw = parse_num(.data[[v$like]]),
+      app_raw  = parse_num(.data[[v$app]]),
+      conf_raw = if (!is.na(v$conf)) parse_num(.data[[v$conf]]) else NA_real_
+    )
+})
+
+# ── Composites & factors ───────────────────────────────────────────────────
+tl_dat = tl_rows %>%
+  mutate(
+    trust      = rowMeans(cbind(hon_raw, sin_raw, eth_raw), na.rm = TRUE),
+    likeability = rowMeans(cbind(like_raw, app_raw), na.rm = TRUE),
+    severity   = factor(vig_id,   levels = c("minor", "moderate", "major")),
+    role       = factor(role,     levels = c("investigator", "inspector")),
+    responseid = factor(responseid),
+    # effect-coded predictors
+    role_ec    = if_else(role == "inspector", 1, -1),
+    severity_num = case_when(
+      severity == "minor"    ~ -1,
+      severity == "moderate" ~  0,
+      severity == "major"    ~  1
+    )
+  )
+
+glimpse(tl_dat)
+```
+
+Check structure and counts
+
+```{r tl-checks}
+table(tl_dat$role, tl_dat$severity)
+
+# Quick descriptives
+tl_dat %>%
+  group_by(role, severity) %>%
+  summarise(
+    n          = sum(!is.na(trust)),
+    trust_M    = round(mean(trust, na.rm = TRUE), 2),
+    trust_SD   = round(sd(trust,   na.rm = TRUE), 2),
+    like_M     = round(mean(likeability, na.rm = TRUE), 2),
+    like_SD    = round(sd(likeability,   na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  kable(caption = "Descriptives: Trust & Likeability by Role × Severity") %>%
+  kable_styling()
+```
+
+------------------------------------------------------------------------
+
+## STEP 2: Reliability & validation checks
+
+```{r reliability}
+library(psych)
+
+# ── Trust alpha per role × severity (using the 3 items) ───────────────────
+trust_items_inv = filtered_by_age %>%
+  transmute(
+    min_hon = parse_num(khon), min_sin = parse_num(ksin),   min_eth = parse_num(keth),
+    mod_hon = parse_num(hhon),    mod_sin = parse_num(hsin),   mod_eth = parse_num(heth),
+    maj_hon = parse_num(xhon),   maj_sin = parse_num(xsin),   maj_eth = parse_num(xeth)
+  )
+
+trust_items_insp = filtered_by_age %>%
+  transmute(
+    min_hon = parse_num(shon),  min_sin = parse_num(ssin),  min_eth = parse_num(seth),
+    mod_hon = parse_num(fhon),  mod_sin = parse_num(fsin),  mod_eth = parse_num(feth),
+    maj_hon = parse_num(yhon),  maj_sin = parse_num(ysin),  maj_eth = parse_num(yeth)
+  )
+
+psych::alpha(trust_items_inv,  check.keys = TRUE)$total %>% select(raw_alpha, std.alpha) %>% print()
+
+psych::alpha(trust_items_insp, check.keys = TRUE)$total %>% select(raw_alpha, std.alpha) %>% print()
+
+# ── Likeability alpha ──────────────────────────────────────────────────────
+like_items_inv = filtered_by_age %>%
+  transmute(
+    min_like = parse_num(klike), min_app = parse_num(kapp),
+    mod_like = parse_num(hlike), mod_app = parse_num(happ),
+    maj_like = parse_num(xlike), maj_app = parse_num(xapp)
+  )
+
+like_items_insp = filtered_by_age %>%
+  transmute(
+    min_like = parse_num(slike), min_app = parse_num(sapp),
+    mod_like = parse_num(flike), mod_app = parse_num(fapp),
+    maj_like = parse_num(ylike), maj_app = parse_num(yapp)
+  )
+
+psych::alpha(like_items_inv,  check.keys = TRUE)$total %>% select(raw_alpha, std.alpha) %>% print()
+
+psych::alpha(like_items_insp, check.keys = TRUE)$total %>% select(raw_alpha, std.alpha) %>% print()
+
+# ── Inter-composite correlation ────────────────────────────────────────────
+cor.test(tl_dat$trust, tl_dat$likeability, use = "complete.obs") %>% tidy() %>% print()
+```
+
+------------------------------------------------------------------------
+
+## STEP 3: Null models (Model 0) — ICC partitioning
+
+```{r null-models}
+library(lme4)
+library(lmerTest)
+
+# ── Trust null model ───────────────────────────────────────────────────────
+M0_trust = lmer(
+  trust ~ 1 + (1 | responseid) + (1 | severity),
+  data = tl_dat,
+  REML = TRUE
+)
+summary(M0_trust)
+
+# ICC: proportion of variance at each level
+vc_trust = as.data.frame(VarCorr(M0_trust))
+icc_participant_trust = vc_trust$vcov[vc_trust$grp == "responseid"] / sum(vc_trust$vcov)
+icc_vignette_trust    = vc_trust$vcov[vc_trust$grp == "severity"]   / sum(vc_trust$vcov)
+
+print(paste("Trust ICC (participant):", round(icc_participant_trust, 3)))
+print(paste("Trust ICC (vignette):",    round(icc_vignette_trust, 3)))
+
+# ── Likeability null model ─────────────────────────────────────────────────
+M0_like = lmer(
+  likeability ~ 1 + (1 | responseid) + (1 | severity),
+  data = tl_dat,
+  REML = TRUE
+)
+summary(M0_like)
+
+vc_like = as.data.frame(VarCorr(M0_like))
+icc_participant_like = vc_like$vcov[vc_like$grp == "responseid"] / sum(vc_like$vcov)
+icc_vignette_like    = vc_like$vcov[vc_like$grp == "severity"]   / sum(vc_like$vcov)
+
+print(paste("Likeability ICC (participant):", round(icc_participant_like, 3)))
+print(paste("Likeability ICC (vignette):",    round(icc_vignette_like, 3)))
+```
+
+------------------------------------------------------------------------
+
+## STEP 4: RQ1 — Trust models (H1a: main effect of role; H1b: role × severity)
+
+```{r trust-models}
+# Model 1: Role only (H1a)
+T1 = lmer(
+  trust ~ role_ec + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 2: Severity only
+T2 = lmer(
+  trust ~ severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 3: Role + Severity (additive)
+T3 = lmer(
+  trust ~ role_ec + severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 4: Role × Severity interaction (H1b)
+T4 = lmer(
+  trust ~ role_ec * severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# ── Model comparison ───────────────────────────────────────────────────────
+anova(T1, T2, T3, T4)
+
+# ── Summaries ─────────────────────────────────────────────────────────────
+summary(T1)
+summary(T3)
+summary(T4)
+```
+
+Planned contrasts: inspectors vs investigators at each severity level (Bonferroni α = .001)
+
+```{r trust-contrasts}
+library(emmeans)
+
+emm_trust = emmeans(T4, ~ role_ec | severity_num,
+                     at = list(severity_num = c(-1, 0, 1)))
+
+# Recode for readable output
+emm_trust_role = emmeans(T4, pairwise ~ role_ec | severity_num,
+                           at = list(severity_num = c(-1, 0, 1)),
+                           adjust = "bonferroni")
+summary(emm_trust_role$contrasts)
+
+# Effect sizes (Cohen's d)
+eff_size(emm_trust, sigma = sigma(T4), edf = df.residual(T4))
+```
+
+Plot Role × Severity for trust
+
+```{r trust-plot}
+emm_trust_df = as.data.frame(emmeans(T4, ~ role_ec * severity_num,
+                                       at = list(severity_num = c(-1, 0, 1))))
+emm_trust_df = emm_trust_df %>%
+  mutate(
+    Role     = if_else(role_ec == 1, "Inspector", "Investigator"),
+    Severity = factor(severity_num, levels = c(-1, 0, 1),
+                      labels = c("Minor", "Moderate", "Major"))
+  )
+
+ggplot(emm_trust_df, aes(x = Severity, y = emmean, color = Role, group = Role)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15) +
+  scale_color_manual(values = c("Inspector" = "#2196F3", "Investigator" = "#E53935")) +
+  labs(title = "Estimated Trust by Role and QRP Severity",
+       y = "Estimated Marginal Mean (Trust)", x = "QRP Severity") +
+  theme_minimal(base_size = 13) +
+  coord_cartesian(ylim = c(1, 5))
+```
+
+------------------------------------------------------------------------
+
+## STEP 5: RQ2 — Likeability models (H2a: main effect of role; H2b: role × severity)
+
+```{r likeability-models}
+# Model 1: Role only (H2a)
+L1 = lmer(
+  likeability ~ role_ec + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 2: Severity only
+L2 = lmer(
+  likeability ~ severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 3: Role + Severity (additive)
+L3 = lmer(
+  likeability ~ role_ec + severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# Model 4: Role × Severity interaction (H2b)
+L4 = lmer(
+  likeability ~ role_ec * severity_num + (1 | responseid) + (1 | severity),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+# ── Model comparison ───────────────────────────────────────────────────────
+anova(L1, L2, L3, L4)
+
+summary(L1)
+summary(L3)
+summary(L4)
+```
+
+Planned contrasts: Bonferroni α = .001
+
+```{r likeability-contrasts}
+emm_like_role = emmeans(L4, pairwise ~ role_ec | severity_num,
+                          at = list(severity_num = c(-1, 0, 1)),
+                          adjust = "bonferroni")
+summary(emm_like_role$contrasts)
+
+eff_size(emmeans(L4, ~ role_ec | severity_num,
+                  at = list(severity_num = c(-1, 0, 1))),
+         sigma = sigma(L4), edf = df.residual(L4))
+```
+
+Plot Role × Severity for likeability
+
+```{r like-plot}
+emm_like_df = as.data.frame(emmeans(L4, ~ role_ec * severity_num,
+                                      at = list(severity_num = c(-1, 0, 1)))) %>%
+  mutate(
+    Role     = if_else(role_ec == 1, "Inspector", "Investigator"),
+    Severity = factor(severity_num, levels = c(-1, 0, 1),
+                      labels = c("Minor", "Moderate", "Major"))
+  )
+
+ggplot(emm_like_df, aes(x = Severity, y = emmean, color = Role, group = Role)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15) +
+  scale_color_manual(values = c("Inspector" = "#2196F3", "Investigator" = "#E53935")) +
+  labs(title = "Estimated Likeability by Role and QRP Severity",
+       y = "Estimated Marginal Mean (Likeability)", x = "QRP Severity") +
+  theme_minimal(base_size = 13) +
+  coord_cartesian(ylim = c(1, 5))
+```
+
+------------------------------------------------------------------------
+
+## STEP 6: RQ3 — Perceived Trueness of the Finding (H3: severity → trueness)
+
+```{r trueness-data}
+# Trueness is only for investigators, one item per vignette
+trueness_dat = filtered_by_age %>%
+  transmute(
+    responseid,
+    minor    = parse_num(kcon),
+    moderate = parse_num(hcon),
+    major    = parse_num(xcon)
+  ) %>%
+  pivot_longer(
+    cols      = c(minor, moderate, major),
+    names_to  = "severity",
+    values_to = "trueness"
+  ) %>%
+  mutate(
+    severity     = factor(severity, levels = c("minor", "moderate", "major")),
+    severity_num = case_when(
+      severity == "minor"    ~ -1,
+      severity == "moderate" ~  0,
+      severity == "major"    ~  1
+    ),
+    responseid = factor(responseid),
+    trueness_c = trueness - 3
+  )
+
+# Descriptives
+trueness_dat %>%
+  group_by(severity) %>%
+  summarise(
+    n  = sum(!is.na(trueness)),
+    M  = round(mean(trueness, na.rm = TRUE), 2),
+    SD = round(sd(trueness,   na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  kable(caption = "Trueness Descriptives by QRP Severity") %>%
+  kable_styling()
+```
+
+Model FT1: Trueness \~ Severity (H3)
+
+```{r trueness-model}
+FT1 = lmer(
+  trueness_c ~ severity_num + (1 | responseid) + (1 | severity),
+  data    = trueness_dat,
+  REML    = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+summary(FT1)
+
+# Planned contrasts across severity levels
+emm_trueness = emmeans(FT1, pairwise ~ severity_num,
+                         at     = list(severity_num = c(-1, 0, 1)),
+                         adjust = "bonferroni")
+summary(emm_trueness$contrasts)
+
+eff_size(emmeans(FT1, ~ severity_num, at = list(severity_num = c(-1, 0, 1))),
+         sigma = sigma(FT1), edf = df.residual(FT1))
+```
+
+Plot trueness by severity
+
+```{r trueness-plot}
+emm_true_df = as.data.frame(
+  emmeans(FT1, ~ severity_num, at = list(severity_num = c(-1, 0, 1)))
+) %>%
+  mutate(Severity = factor(severity_num, levels = c(-1, 0, 1),
+                            labels = c("Minor", "Moderate", "Major")))
+
+ggplot(emm_true_df, aes(x = Severity, y = emmean, group = 1)) +
+  geom_line(linewidth = 1, color = "#7B1FA2") +
+  geom_point(size = 3, color = "#7B1FA2") +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15,
+                color = "#7B1FA2") +
+  labs(title = "Perceived Trueness of Finding by QRP Severity",
+       y = "Estimated Marginal Mean (Trueness)", x = "QRP Severity") +
+  theme_minimal(base_size = 13) +
+  coord_cartesian(ylim = c(1, 5))
+```
+
+------------------------------------------------------------------------
+
+## STEP 7: Robustness checks — demographic covariates
+
+```{r robustness-demographics}
+# Attach demographics to tl_dat
+demo_dat = filtered_by_age %>%
+  transmute(
+    responseid = responseid,
+    gender     = factor(`gender.identity`),
+    political  = factor(political, levels = c(
+      "Strongly Liberal", "Liberal", "Lean Liberal",
+      "Centrist",
+      "Lean Conservative", "Conservative", "Strongly Conservative"
+    )),
+    religion   = factor(religion)
+  )
+
+tl_robust = tl_dat %>%
+  mutate(responseid = as.character(responseid)) %>%
+  left_join(demo_dat, by = "responseid") %>%
+  mutate(responseid = factor(responseid))
+
+
+# Trust robustness model (Model 4 + demographics)
+T4_robust = lmer(
+  trust ~ role_ec * severity_num + gender + political + religion +
+    (1 | responseid) + (1 | severity),
+  data    = tl_robust,
+  REML    = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+L4_robust = lmer(
+  likeability ~ role_ec * severity_num + gender + political + religion +
+    (1 | responseid) + (1 | severity),
+  data    = tl_robust,
+  REML    = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+
+
+summary(L4_robust)
+
+# Compare role_ec * severity_num effect with and without demographics
+summary(T4_robust)
+summary(L4_robust)
+
+# Check if the interaction term stays significant in both
+fixef(T4)[["role_ec:severity_num"]]
+fixef(T4_robust)[["role_ec:severity_num"]]
+
+fixef(L4)[["role_ec:severity_num"]]
+fixef(L4_robust)[["role_ec:severity_num"]]
+```

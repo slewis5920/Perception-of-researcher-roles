@@ -254,7 +254,6 @@ attr_model_dat <- attr_long2 %>%
     ),
     vignette_id = factor(severity)
   )
-contrasts(attr_model_dat$attribute) <- contr.sum
 ```
 
 ```{r}
@@ -274,23 +273,6 @@ A1 <- glmer(
   family = binomial,
   control = glmerControl(optimizer = "bobyqa")
 )
-```
-
-```{r}
-# extract the 8 printed attribute coefficients
-coefs <- fixef(A1)
-atts <- coefs[grep("^attribute", names(coefs))]
-
-# compute the 9th (implied) coefficient
-attribute9 <- -sum(atts)
-
-# build the full vector with names
-att_names <- levels(attr_model_dat$attribute)
-full_att_coefs <- c(atts, attribute9)
-names(full_att_coefs) <- att_names
-
-# print it
-full_att_coefs
 ```
 
 ```{r}
@@ -329,6 +311,208 @@ A3 <- glmer(
 
 summary(A3)
 ```
+
+```{r}
+# A4: Tests whether the effect of researcher depends on severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A4 <- glmer(
+  chosen ~ researcher_ec * severity_num + attribute +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A4)
+```
+
+Pivot the dataset
+
+```{r}
+attr_long <- attr_dat %>%
+  pivot_longer(
+    cols = -responseid,
+    names_to = "raw_item",
+    values_to = "choice_raw"
+  )
+```
+
+find the correct columns to attribute to the variables
+
+```{r}
+attr_long <- attr_long %>%
+  mutate(
+    severity = case_when(
+      str_detect(raw_item, "^min") ~ "minor",
+      str_detect(raw_item, "^mod") ~ "moderate",
+      str_detect(raw_item, "^maj") ~ "major",
+      TRUE ~ NA_character_
+    ),
+    item_stub = str_remove(raw_item, "^(min|mod|maj)"),
+    attribute = case_when(
+      item_stub %in% c("smart") ~ "smarter",
+      item_stub %in% c("better", "bett") ~ "better_researcher",
+      item_stub %in% c("creative", "creat") ~ "creative",
+      item_stub %in% c("rather", "rath") ~ "rather_be",
+      item_stub %in% c("should", "shou") ~ "should_be",
+      item_stub %in% c("regard", "reg") ~ "celebrated",
+      item_stub %in% c("typ") ~ "typical",
+      item_stub %in% c("keep") ~ "job_security",
+      item_stub %in% c("get") ~ "job_outcome",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+Check to make sure it looks correcy and get a count
+
+```{r}
+head(attr_long, 20)
+table(attr_long$severity, useNA = "ifany")
+table(attr_long$attribute, useNA = "ifany")
+```
+
+set roles
+
+```{r}
+attr_long2 <- attr_long %>%
+  tidyr::crossing(researcher = c("investigator", "inspector"))
+```
+
+figure out how many rows for the data
+
+```{r}
+head(attr_long2, 20)
+dim(attr_long)
+dim(attr_long2)
+```
+
+find the correct columns and attruibute them to role type
+
+```{r}
+attr_long2 <- attr_long2 %>%
+  mutate(
+    chosen = case_when(
+      str_detect(choice_raw, "^reported researcher") & researcher == "investigator" ~ 1,
+      str_detect(choice_raw, "^reporting researcher") & researcher == "inspector" ~ 1,
+      str_detect(choice_raw, "^neither") ~ 0,
+      TRUE ~ 0
+    )
+  )
+```
+
+Check to make sure it looks correcy and get a count
+
+```{r}
+head(attr_long2, 20)
+table(attr_long2$chosen, useNA = "ifany")
+table(attr_long2$researcher, attr_long2$chosen)
+```
+
+set up the data fro the models
+
+```{r}
+attr_model_dat <- attr_long2 %>%
+  mutate(
+    researcher_ec = if_else(researcher == "inspector", 1, -1),
+    severity_num = case_when(
+      severity == "minor" ~ -1,
+      severity == "moderate" ~ 0,
+      severity == "major" ~ 1
+    ),
+    responseid = factor(responseid),
+    researcher = factor(researcher, levels = c("investigator", "inspector")),
+    severity = factor(severity, levels = c("minor", "moderate", "major")),
+    attribute = factor(
+      attribute,
+      levels = c(
+        "smarter",
+        "better_researcher",
+        "creative",
+        "rather_be",
+        "should_be",
+        "celebrated",
+        "typical",
+        "job_security",
+        "job_outcome"
+      )
+    ),
+    vignette_id = factor(severity)
+  )
+```
+
+creat some model tables
+
+```{r}
+str(attr_model_dat)
+table(attr_model_dat$researcher)
+table(attr_model_dat$severity)
+table(attr_model_dat$attribute)
+table(attr_model_dat$researcher_ec)
+table(attr_model_dat$severity_num)
+
+```
+
+Run our first model in the model build for hypo 1
+
+```{r}
+
+A1 <- glmer(
+  chosen ~ researcher_ec + attribute +
+    (1 | responseid) + (1 | vignette_id),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa")
+)
+```
+
+summarize our baseline
+
+```{r}
+# chosen = 0 (not selected), 1 (selected)
+summary(A1)
+```
+
+run model two
+
+```{r}
+# A2 tests whether choice differs by severity, controlling for attribute
+# chosen = 0 (not selected), 1 (selected)
+
+A2 <- glmer(
+  chosen ~ attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A2)
+```
+
+run model three
+
+```{r}
+# A3: Tests whether choice differs by BOTH researcher and severity,
+# while controlling for attribute type
+
+# DV: chosen (0 = not selected, 1 = selected)
+
+A3 <- glmer(
+  chosen ~ researcher_ec + attribute + severity_num +
+    (1 | responseid),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(A3)
+```
+
+run model four
 
 ```{r}
 # A4: Tests whether the effect of researcher depends on severity,
@@ -694,43 +878,6 @@ ggplot(emm_like_df, aes(x = Severity, y = emmean, color = Role, group = Role)) +
 ```
 
 ------------------------------------------------------------------------
-```{r}
-# Refit model using RAW trueness (not centered)
-FT1_raw <- lmer(
-  trueness ~ severity_num + (1 | responseid) + (1 | severity),
-  data    = trueness_dat,
-  REML    = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
-
-# Estimated marginal means on the original 1–5 scale
-emm_true_df_raw <- as.data.frame(
-  emmeans(FT1_raw, ~ severity_num,
-          at = list(severity_num = c(-1, 0, 1)))
-) %>%
-  mutate(
-    Severity = factor(
-      severity_num,
-      levels = c(-1, 0, 1),
-      labels = c("Minor", "Moderate", "Major")
-    )
-  )
-
-# Plot on the 1–5 scale
-ggplot(emm_true_df_raw, aes(x = Severity, y = emmean, group = 1)) +
-  geom_line(linewidth = 1, color = "#7B1FA2") +
-  geom_point(size = 3, color = "#7B1FA2") +
-  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL),
-                width = 0.15, color = "#7B1FA2") +
-  labs(
-    title = "Perceived Trueness of Finding by QRP Severity",
-    y = "Estimated Marginal Mean (Trueness)",
-    x = "QRP Severity"
-  ) +
-  theme_minimal(base_size = 13) +
-  coord_cartesian(ylim = c(1, 5))
-
-```
 
 ## STEP 6: RQ3 — Perceived Trueness of the Finding (H3: severity → trueness)
 
@@ -811,14 +958,10 @@ ggplot(emm_true_df, aes(x = Severity, y = emmean, group = 1)) +
   labs(title = "Perceived Trueness of Finding by QRP Severity",
        y = "Estimated Marginal Mean (Trueness)", x = "QRP Severity") +
   theme_minimal(base_size = 13) +
-  coord_cartesian()
-
+  coord_cartesian(ylim = c(1, 5))
 ```
 
 ------------------------------------------------------------------------
-```{r}
-
-```
 
 ## STEP 7: Robustness checks — demographic covariates
 
@@ -873,72 +1016,82 @@ fixef(T4_robust)[["role_ec:severity_num"]]
 fixef(L4)[["role_ec:severity_num"]]
 fixef(L4_robust)[["role_ec:severity_num"]]
 ```
+
+#summary tables 
 ```{r}
-tl_robust$ideology_num <- as.numeric(tl_robust$political)
 
-# Center it for interpretation
-tl_robust$ideology_c <- scale(tl_robust$ideology_num, scale = FALSE)
+library(broom.mixed)
 
+# Pull fixed effects from each model
+make_model_table = function(models, model_names, dv_name) {
+  
+  # AIC/BIC comparison
+  model_fit = map2_dfr(models, model_names, function(m, nm) {
+    tibble(
+      Model = nm,
+      AIC   = round(AIC(m), 1),
+      BIC   = round(BIC(m), 1),
+      logLik = round(as.numeric(logLik(m)), 1)
+    )
+  })
+  
+  # Fixed effects from final model (Model 4)
+  final_fe = tidy(models[[4]], effects = "fixed", conf.int = TRUE) %>%
+    mutate(
+      term = recode(term,
+        "(Intercept)"        = "Intercept",
+        "role_ec"            = "Role (inspector vs. investigator)",
+        "severity_num"       = "QRP Severity",
+        "role_ec:severity_num" = "Role × Severity"
+      ),
+      b    = round(estimate, 2),
+      SE   = round(std.error, 2),
+      t    = round(statistic, 2),
+      p    = case_when(
+        p.value < .001 ~ "< .001",
+        p.value < .01  ~ paste0(round(p.value, 3)),
+        TRUE           ~ paste0(round(p.value, 3))
+      ),
+      `95% CI` = paste0("[", round(conf.low, 2), ", ", round(conf.high, 2), "]")
+    ) %>%
+    select(term, b, SE, `95% CI`, t, p)
+  
+  list(fit = model_fit, fixed = final_fe)
+}
+
+models = list(T1, T2, T3, T4)
+model_names = c("Model 1 (Role)", "Model 2 (Severity)", 
+                "Model 3 (Role + Severity)", "Model 4 (Role × Severity)")
+
+model_fit = do.call(rbind, lapply(seq_along(models), function(i) {
+  m = models[[i]]
+  data.frame(
+    Model  = model_names[i],
+    AIC    = round(AIC(m), 1),
+    BIC    = round(BIC(m), 1),
+    logLik = round(as.numeric(logLik(m)), 1)
+  )
+}))
+
+model_fit %>%
+  kable(caption = "Table 1. Model Fit Indices for Trust Step-Up Models",
+        align = "lrrr") %>%
+  kable_styling(full_width = FALSE) %>%
+  footnote(general = "Lower AIC/BIC indicates better fit.")
+
+# Model fit table
+trust_table$fit %>%
+  kable(caption = "Table 1. Model Fit Indices for Trust Step-Up Models",
+        align = "lrrr") %>%
+  kable_styling(full_width = FALSE) %>%
+  footnote(general = "Lower AIC/BIC indicates better fit.")
+
+# Fixed effects table (Model 4)
+trust_table$fixed %>%
+  kable(caption = "Table 2. Fixed Effects for Trust Model 4 (Role × Severity)",
+        col.names = c("Parameter", "b", "SE", "95% CI", "t", "p"),
+        align = "lrrrrr") %>%
+  kable_styling(full_width = FALSE) %>%
+  footnote(general = "Effect coding: inspector = 1, investigator = −1. Severity: minor = −1, moderate = 0, major = 1.")
 ```
-
-```{r}
-trust_mod_ideo <- lmer(
-  trust ~ role_ec * severity_num * ideology_c +
-    gender + political + religion +
-    (1 | responseid) + (1 | severity),
-  data = tl_robust,
-  REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
-
-summary(trust_mod_ideo)
-
-```
-
-```{r}
-tl_robust$ideology_num <- as.numeric(tl_robust$political)
-tl_robust$ideology_c <- scale(tl_robust$ideology_num, scale = FALSE)
-
-
-```
-
-```{r}
-trust_mod_pol <- lmer(
-  trust ~ role_ec * severity_num * ideology_c +
-    (1 | responseid) + (1 | severity),
-  data = tl_robust,
-  REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
-
-summary(trust_mod_pol)
-
-```
-
-
-```{r}
-trust_mod_pol2 <- lmer(
-  trust ~ role_ec * severity_num * ideology_c +
-    gender + religion +
-    (1 | responseid) + (1 | severity),
-  data = tl_robust,
-  REML = FALSE
-)
-summary(trust_mod_pol2)
-```
-
-```{r}
-like_mod_ideo <- lmer(
-  likeability ~ role_ec * severity_num * ideology_c +
-    gender + religion +
-    (1 | responseid) + (1 | severity),
-  data = tl_robust,
-  REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
-
-summary(like_mod_ideo)
-
-```
-
 

@@ -55,9 +55,9 @@ pre-reg.
 
 Participants will be excluded if they: 1) do not consent or 2) complete
 the study in less than seven minutes or 3) exhibit no variability in
-their responses (e.g., selecting all 5s or all 3s) across all Integrity and
-likeability items, and 4) fail to complete the Integrity and likeability
-ratings for at least one vignettes.
+their responses (e.g., selecting all 5s or all 3s) across all Integrity
+and likeability items, and 4) fail to complete the Integrity and
+likeability ratings for at least one vignettes.
 
 An attention check will be used to assess whether participants paid
 attention during the experiment by requiring participants to select a
@@ -576,27 +576,30 @@ summary(A4)
 
 # Integrity & LIKEABILITY ANALYSIS (RQ1, RQ2) + TRUENESS (RQ3)
 
-Research Question 1: How is integrity influenced by role and QRP severity?
-•	Hypothesis 1a: Inspectors will be rated higher in integrity than investigators.
-•	Hypothesis 1b: The relative integrity of inspectors versus investigators will increase as QRP severity increases.
+Research Question 1: How is integrity influenced by role and QRP
+severity? • Hypothesis 1a: Inspectors will be rated higher in integrity
+than investigators. • Hypothesis 1b: The relative integrity of
+inspectors versus investigators will increase as QRP severity increases.
 
-Research Question 2: How is likeability influenced by role and QRP severity?
-•	Hypothesis 2a: Investigators will be rated more likable than inspectors. 
-•	Hypothesis 2b: At low QRP severity, investigators will be rated as more likeable than inspectors, but at high QRP severity, inspectors will be rated as more likeable than investigators.
+Research Question 2: How is likeability influenced by role and QRP
+severity? • Hypothesis 2a: Investigators will be rated more likable than
+inspectors. • Hypothesis 2b: At low QRP severity, investigators will be
+rated as more likeable than inspectors, but at high QRP severity,
+inspectors will be rated as more likeable than investigators.
 
-Research Question 3: Is the perceived trueness of the finding influenced by QRP severity?
-•	Hypothesis 3: Perceived trueness will decrease as QRP severity increases.
-
+Research Question 3: Is the perceived trueness of the finding influenced
+by QRP severity? • Hypothesis 3: Perceived trueness will decrease as QRP
+severity increases.
 
 Research Questions 1–2: Integrity and Likeability Step-up MLMs will test
 Role, Severity, and Role × Severity interaction:
 
-Model 1: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + ν0k + μ0jk +
-εijk Model 2: Integrity/Likeabilityijk = γ000 + γ010 (Severityk) + ν0k +
-μ0k + εijk Model 3: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) +
-γ010 (Severityk) + ν0k + μ0jk + εijk Model 4: Integrity/Likeabilityijk =
-γ000 + γ100 (Researcherj) + γ010 (Severityk) + γ110(Researcherj ×
-Severityk) + ν0k + μ0jk + εijk
+Model 1: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + ν0k +
+μ0jk + εijk Model 2: Integrity/Likeabilityijk = γ000 + γ010
+(Severityk) + ν0k + μ0k + εijk Model 3: Integrity/Likeabilityijk =
+γ000 + γ100 (Researcherj) + γ010 (Severityk) + ν0k + μ0jk + εijk Model
+4: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + γ010
+(Severityk) + γ110(Researcherj × Severityk) + ν0k + μ0jk + εijk
 
 Research Question 3: Trueness of Findings Model FT1: Truenessijk= γ000 +
 γ010 (Severityk) + ν0k + μ0j + εijk
@@ -816,7 +819,9 @@ summary(T2)
 summary(T3)
 summary(T4)
 ```
+
 PAST CODE WITH SEVERITY RANDOM EFFECT
+
 ```{r}
 # Model 1: Role only (H1a)
 T1 = lmer(
@@ -854,10 +859,6 @@ summary(T1)
 summary(T3)
 summary(T4)
 ```
-
-
-
-
 
 Planned contrasts: inspectors vs investigators at each severity level
 (Bonferroni α = .001)
@@ -912,12 +913,12 @@ inspectors will be rated as more likeable than investigators.
 Research Questions 1–2: Integrity and Likeability Step-up MLMs will test
 Role, Severity, and Role × Severity interaction:
 
-Model 1: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + ν0k + μ0jk +
-εijk Model 2: Integrity/Likeabilityijk = γ000 + γ010 (Severityk) + ν0k +
-μ0k + εijk Model 3: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) +
-γ010 (Severityk) + ν0k + μ0jk + εijk Model 4: Integrity/Likeabilityijk =
-γ000 + γ100 (Researcherj) + γ010 (Severityk) + γ110(Researcherj ×
-Severityk) + ν0k + μ0jk + εijk
+Model 1: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + ν0k +
+μ0jk + εijk Model 2: Integrity/Likeabilityijk = γ000 + γ010
+(Severityk) + ν0k + μ0k + εijk Model 3: Integrity/Likeabilityijk =
+γ000 + γ100 (Researcherj) + γ010 (Severityk) + ν0k + μ0jk + εijk Model
+4: Integrity/Likeabilityijk = γ000 + γ100 (Researcherj) + γ010
+(Severityk) + γ110(Researcherj × Severityk) + ν0k + μ0jk + εijk
 
 ```{r likeability-models}
 # Model 1: Role only (H2a)
@@ -957,42 +958,33 @@ summary(L3)
 summary(L4)
 ```
 
-###```{r likeability-models}
-# Model 1: Role only (H2a)
-L1 = lmer(
-  likeability ~ role_ec + (1 | responseid) + (1 | severity),
-  data = tl_dat, REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
+###\`\`\`{r likeability-models} \# Model 1: Role only (H2a) L1 = lmer(
+likeability \~ role_ec + (1 \| responseid) + (1 \| severity), data =
+tl_dat, REML = FALSE, control = lmerControl(optimizer = "bobyqa") )
 
 # Model 2: Severity only
-L2 = lmer(
-  likeability ~ severity_num + (1 | responseid) + (1 | severity),
-  data = tl_dat, REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
+
+L2 = lmer( likeability \~ severity_num + (1 \| responseid) + (1 \|
+severity), data = tl_dat, REML = FALSE, control = lmerControl(optimizer
+= "bobyqa") )
 
 # Model 3: Role + Severity (additive)
-L3 = lmer(
-  likeability ~ role_ec + severity_num + (1 | responseid) + (1 | severity),
-  data = tl_dat, REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
+
+L3 = lmer( likeability \~ role_ec + severity_num + (1 \| responseid) +
+(1 \| severity), data = tl_dat, REML = FALSE, control =
+lmerControl(optimizer = "bobyqa") )
 
 # Model 4: Role × Severity interaction (H2b)
-L4 = lmer(
-  likeability ~ role_ec * severity_num + (1 | responseid) + (1 | severity),
-  data = tl_dat, REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
+
+L4 = lmer( likeability \~ role_ec \* severity_num + (1 \| responseid) +
+(1 \| severity), data = tl_dat, REML = FALSE, control =
+lmerControl(optimizer = "bobyqa") )
 
 # model comparison
+
 anova(L1, L2, L3, L4)
 
-summary(L1)
-summary(L2)
-summary(L3)
-summary(L4)
+summary(L1) summary(L2) summary(L3) summary(L4)
 
 Planned contrasts: Bonferroni α = .001
 

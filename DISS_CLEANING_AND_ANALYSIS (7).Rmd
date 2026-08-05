@@ -820,44 +820,39 @@ summary(T3)
 summary(T4)
 ```
 
-PAST CODE WITH SEVERITY RANDOM EFFECT
+RANDOM SLOPE TESTING — per prereg: "random slopes for within-participant
+predictors where possible." Role and severity are both within-participant
+(fully crossed design), so we test maximal structure first and step down
+only if models fail to converge or are singular.
 
-```{r}
-# Model 1: Role only (H1a)
-T1 = lmer(
-  Integrity ~ role_ec + (1 | responseid) + (1 | severity),
+```{r Integrity-slope-testing}
+# Maximal: random slopes for role AND severity (plus their interaction) by participant
+T4_max1 = lmer(
+  Integrity ~ role_ec * severity_num + (1 + role_ec * severity_num | responseid),
   data = tl_dat, REML = FALSE,
   control = lmerControl(optimizer = "bobyqa")
 )
+isSingular(T4_max1)
 
-# Model 2: Severity only
-T2 = lmer(
-  Integrity ~ severity_num + (1 | responseid) + (1 | severity),
+# Step down: drop interaction slope, keep both main slopes
+T4_max2 = lmer(
+  Integrity ~ role_ec * severity_num + (1 + role_ec + severity_num | responseid),
   data = tl_dat, REML = FALSE,
   control = lmerControl(optimizer = "bobyqa")
 )
+isSingular(T4_max2)
 
-# Model 3: Role + Severity (additive)
-T3 = lmer(
-  Integrity ~ role_ec + severity_num + (1 | responseid) + (1 | severity),
+# Step down further: keep only role slope (your key H1a/H1b predictor)
+T4_max3 = lmer(
+  Integrity ~ role_ec * severity_num + (1 + role_ec | responseid),
   data = tl_dat, REML = FALSE,
   control = lmerControl(optimizer = "bobyqa")
 )
+isSingular(T4_max3)
+summary(T4_max1)
+summary(T4_max2)
+summary(T4_max3)
 
-# Model 4: Role × Severity interaction (H1b)
-T4 = lmer(
-  Integrity ~ role_ec * severity_num + (1 | responseid) + (1 | severity),
-  data = tl_dat, REML = FALSE,
-  control = lmerControl(optimizer = "bobyqa")
-)
-
-#Model comparison
-anova(T1, T2, T3, T4)
-
-# Summaries
-summary(T1)
-summary(T3)
-summary(T4)
 ```
 
 Planned contrasts: inspectors vs investigators at each severity level
@@ -958,33 +953,38 @@ summary(L3)
 summary(L4)
 ```
 
-###\`\`\`{r likeability-models} \# Model 1: Role only (H2a) L1 = lmer(
-likeability \~ role_ec + (1 \| responseid) + (1 \| severity), data =
-tl_dat, REML = FALSE, control = lmerControl(optimizer = "bobyqa") )
+Random slope testing for likeability — same logic as Integrity above.
 
-# Model 2: Severity only
+```{r likeability-slope-testing}
+L4_max1 = lmer(
+  likeability ~ role_ec * severity_num + (1 + role_ec * severity_num | responseid),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+isSingular(L4_max1)
 
-L2 = lmer( likeability \~ severity_num + (1 \| responseid) + (1 \|
-severity), data = tl_dat, REML = FALSE, control = lmerControl(optimizer
-= "bobyqa") )
+L4_max2 = lmer(
+  likeability ~ role_ec * severity_num + (1 + role_ec + severity_num | responseid),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+isSingular(L4_max2)
 
-# Model 3: Role + Severity (additive)
+L4_max3 = lmer(
+  likeability ~ role_ec * severity_num + (1 + role_ec | responseid),
+  data = tl_dat, REML = FALSE,
+  control = lmerControl(optimizer = "bobyqa")
+)
+isSingular(L4_max3)
 
-L3 = lmer( likeability \~ role_ec + severity_num + (1 \| responseid) +
-(1 \| severity), data = tl_dat, REML = FALSE, control =
-lmerControl(optimizer = "bobyqa") )
+summary(L4_max1)
+summary(L4_max2)
+summary(L4_max3)
 
-# Model 4: Role × Severity interaction (H2b)
-
-L4 = lmer( likeability \~ role_ec \* severity_num + (1 \| responseid) +
-(1 \| severity), data = tl_dat, REML = FALSE, control =
-lmerControl(optimizer = "bobyqa") )
-
-# model comparison
-
-anova(L1, L2, L3, L4)
-
-summary(L1) summary(L2) summary(L3) summary(L4)
+# Use whichever is the most complex non-singular model as the structure
+# for L1-L4 above; if all are singular, the intercept-only structure
+# already used is justified and should be cited as such.
+```
 
 Planned contrasts: Bonferroni α = .001
 
@@ -1075,6 +1075,7 @@ FT1 = lmer(
 )
 
 summary(FT1)
+isSingular(FT1)
 
 # Planned contrasts across severity levels
 emm_trueness = emmeans(FT1, pairwise ~ severity_num,
@@ -1101,9 +1102,9 @@ ggplot(emm_true_df, aes(x = Severity, y = emmean, group = 1)) +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.20,
                 color = "#7B1FA2") +
   labs(title = "Perceived Trueness of Finding by QRP Severity",
-       y = "Estimated Marginal Mean (Trueness)", x = "QRP Severity") +
+       y = "Trueness (EMM)", x = "QRP Severity") +
   theme_minimal(base_size = 15) +
-  coord_cartesian(ylim = c(1, 5))
+  coord_cartesian(ylim = c(-2, 2))
 ```
 
 ------------------------------------------------------------------------
@@ -1450,3 +1451,4 @@ data.frame(
   footnote(general = "Trueness centered at 3 (neutral). QRP Severity: minor = −1, moderate = 0, major = 1. * p < .05. ** p < .01. *** p < .001.",
            general_title = "Note.", footnote_as_chunk = TRUE)
 ```
+

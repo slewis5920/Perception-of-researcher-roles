@@ -2874,3 +2874,270 @@ cat("\n--- Trueness random effects ---\n")
 print(get_variance_components(FT1))
 print(get_random_intercept_icc(FT1))
 ```
+
+
+```{r}
+# ============================================================
+# CFA: Integrity vs. Likeability
+# ============================================================
+
+# Load packages
+library(dplyr)
+library(tidyr)
+library(lavaan)
+library(semTools)
+
+
+# ============================================================
+# 1. Create participant-level data
+# ============================================================
+# Average each item across the three severity levels separately
+# for investigators and inspectors.
+
+cfa_dat <- tl_dat %>%
+  group_by(responseid, role) %>%
+  summarise(
+    hon  = mean(hon_raw,  na.rm = TRUE),
+    sin  = mean(sin_raw,  na.rm = TRUE),
+    eth  = mean(eth_raw,  na.rm = TRUE),
+    like = mean(like_raw, na.rm = TRUE),
+    app  = mean(app_raw,  na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+# ============================================================
+# 2. One-factor model
+# ============================================================
+# Tests whether all five items reflect one general evaluation
+# of the researcher.
+
+one_factor <- '
+  Evaluation =~ hon + sin + eth + like + app
+'
+
+
+# Investigator: one-factor model
+investigator_one <- cfa(
+  one_factor,
+  data = cfa_dat %>% filter(role == "investigator"),
+  missing = "fiml"
+)
+
+# Inspector: one-factor model
+inspector_one <- cfa(
+  one_factor,
+  data = cfa_dat %>% filter(role == "inspector"),
+  missing = "fiml"
+)
+
+
+# ============================================================
+# 3. Two-factor model
+# ============================================================
+# Tests whether integrity and likeability are distinguishable
+# constructs.
+
+two_factor <- '
+  Integrity =~ hon + sin + eth
+  Likeability =~ like + app
+'
+
+
+# Investigator: two-factor model
+investigator_two <- cfa(
+  two_factor,
+  data = cfa_dat %>% filter(role == "investigator"),
+  missing = "fiml"
+)
+
+# Inspector: two-factor model
+inspector_two <- cfa(
+  two_factor,
+  data = cfa_dat %>% filter(role == "inspector"),
+  missing = "fiml"
+)
+
+
+# ============================================================
+# 4. Print model results
+# ============================================================
+
+cat("\n================ INVESTIGATOR: ONE FACTOR ================\n")
+summary(
+  investigator_one,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+cat("\n================ INVESTIGATOR: TWO FACTORS ================\n")
+summary(
+  investigator_two,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+cat("\n================ INSPECTOR: ONE FACTOR ================\n")
+summary(
+  inspector_one,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+cat("\n================ INSPECTOR: TWO FACTORS ================\n")
+summary(
+  inspector_two,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+
+# ============================================================
+# 5. Compare one-factor vs. two-factor models
+# ============================================================
+
+cat("\n================ MODEL COMPARISONS ================\n")
+
+cat("\nInvestigator:\n")
+anova(
+  investigator_one,
+  investigator_two
+)
+
+cat("\nInspector:\n")
+anova(
+  inspector_one,
+  inspector_two
+)
+
+
+# ============================================================
+# 6. Create easy-to-read fit table
+# ============================================================
+
+fit_table <- rbind(
+  Investigator_1Factor = fitMeasures(
+    investigator_one,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  ),
+  
+  Investigator_2Factor = fitMeasures(
+    investigator_two,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  ),
+  
+  Inspector_1Factor = fitMeasures(
+    inspector_one,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  ),
+  
+  Inspector_2Factor = fitMeasures(
+    inspector_two,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  )
+)
+
+cat("\n================ FIT TABLE ================\n")
+print(round(fit_table, 3))
+
+
+# ============================================================
+# 7. Measurement invariance across researcher role
+# ============================================================
+# ONLY run/interpret this section if the two-factor model
+# provides a reasonable fit.
+#
+# Configural = same factor structure
+# Metric     = equal factor loadings
+# Scalar     = equal loadings + intercepts
+
+
+cat("\n================ CONFIGURAL INVARIANCE ================\n")
+
+configural <- cfa(
+  two_factor,
+  data = cfa_dat,
+  group = "role",
+  missing = "fiml"
+)
+
+summary(
+  configural,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+
+cat("\n================ METRIC INVARIANCE ================\n")
+
+metric <- cfa(
+  two_factor,
+  data = cfa_dat,
+  group = "role",
+  group.equal = "loadings",
+  missing = "fiml"
+)
+
+summary(
+  metric,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+
+cat("\n================ SCALAR INVARIANCE ================\n")
+
+scalar <- cfa(
+  two_factor,
+  data = cfa_dat,
+  group = "role",
+  group.equal = c("loadings", "intercepts"),
+  missing = "fiml"
+)
+
+summary(
+  scalar,
+  fit.measures = TRUE,
+  standardized = TRUE
+)
+
+
+# ============================================================
+# 8. Compare invariance models
+# ============================================================
+
+cat("\n================ INVARIANCE MODEL COMPARISON ================\n")
+
+anova(
+  configural,
+  metric,
+  scalar
+)
+
+
+# ============================================================
+# 9. Invariance fit table
+# ============================================================
+
+invariance_fit_table <- rbind(
+  Configural = fitMeasures(
+    configural,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  ),
+  
+  Metric = fitMeasures(
+    metric,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  ),
+  
+  Scalar = fitMeasures(
+    scalar,
+    c("chisq", "df", "cfi", "tli", "rmsea", "srmr")
+  )
+)
+
+cat("\n================ INVARIANCE FIT TABLE ================\n")
+print(round(invariance_fit_table, 3))
+```
+
+

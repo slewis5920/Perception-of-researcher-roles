@@ -129,3 +129,307 @@ select_cols = c("scenario","icc","f2","denom_df_v","design_effect","total_long_r
 print(dplyr::select(results, dplyr::all_of(select_cols)))
 
 ```
+
+```{r}
+# VIGNETTE A PRIORI POWER ANALYSIS
+# 3 Vignettes x 2 Researcher Roles
+
+library(lme4)
+library(lmerTest)
+library(dplyr)
+library(purrr)
+
+
+#settings
+
+d = 0.24
+f2 = 0.012
+
+alpha_family = 0.05
+k_planned = 4
+alpha_adj = alpha_family / k_planned
+
+power_target = 0.80
+
+# Number of simulations
+n_sim = 100
+
+# Sample sizes to test
+sample_sizes = c(250, 300, 350, 400, 450, 500, 550, 600)
+
+# Participant-level ICCs
+icc_grid = c(0.20, 0.35, 0.40, 0.45, 0.50)
+
+
+# 3 vignettes x 2 researcher roles
+design = expand.grid(
+  vignette = 1:3,
+  role = c("Investigator", "Inspector")
+)
+
+# Make researcher role categorical
+design$role = factor(
+  design$role,
+  levels = c("Investigator", "Inspector")
+)
+
+# Make QRP severity categorical
+design$severity = factor(
+  c("Minor", "Moderate", "Major")[design$vignette],
+  levels = c("Minor", "Moderate", "Major")
+)
+
+simulate_data = function(N, icc, d = 0.24) {
+
+  # Six ratings per participant:
+  # 3 vignettes x 2 researcher roles
+
+  dat = design[
+    rep(1:nrow(design), times = N),
+  ]
+
+  # Participant ID
+  dat$participant = rep(
+    1:N,
+    each = nrow(design)
+  )
+
+# PARTICIPANT RANDOM EFFECT
+
+  residual_sd = 1
+
+  participant_sd =
+    sqrt(
+      (icc * residual_sd^2) /
+        (1 - icc)
+    )
+
+  participant_effect =
+    rnorm(
+      N,
+      mean = 0,
+      sd = participant_sd
+    )
+
+  dat$participant_effect =
+    participant_effect[dat$participant]
+
+#fixed effects 
+  
+  # Main effect of researcher role
+  beta_role = d
+
+  # Main effect of severity
+  beta_severity = 0
+
+  # Role x severity interaction
+  beta_interaction = d
+
+  # Investigator = -0.5
+  # Inspector = +0.5
+
+  role_num = ifelse(
+    dat$role == "Inspector",
+    0.5,
+    -0.5
+  )
+
+  # Minor = -1
+  # Moderate = 0
+  # Major = +1
+
+  severity_num = ifelse(
+    dat$severity == "Minor",
+    -1,
+    ifelse(
+      dat$severity == "Moderate",
+      0,
+      1
+    )
+  )
+
+
+  dat$y =
+    4 +
+    beta_role * role_num +
+    beta_severity * severity_num +
+    beta_interaction *
+      role_num *
+      severity_num +
+    dat$participant_effect +
+    rnorm(
+      nrow(dat),
+      mean = 0,
+      sd = residual_sd
+    )
+
+  return(dat)
+}
+
+
+test_simulation = function(
+    N,
+    icc,
+    d = 0.24
+) {
+
+  dat = simulate_data(
+    N = N,
+    icc = icc,
+    d = d
+  )
+
+
+  model = tryCatch(
+
+    suppressWarnings(
+      lmer(
+        y ~ role * severity +
+          (1 | participant),
+        data = dat,
+        REML = FALSE
+      )
+    ),
+
+    error = function(e) NULL
+  )
+
+
+  # If model fails
+  if (is.null(model)) {
+    return(NA)
+  }
+
+
+# TEST THE ROLE x SEVERITY EFFECT
+
+  # Get the model coefficients
+  model_summary =
+    summary(model)$coefficients
+
+  # Get the two interaction terms
+  interaction_rows =
+    grep(
+      "roleInspector:severity",
+      rownames(model_summary)
+    )
+
+
+  # If interaction terms cannot be found
+  if (length(interaction_rows) == 0) {
+    return(NA)
+  }
+
+
+  # Get p-values for the interaction terms
+  interaction_p =
+    model_summary[
+      interaction_rows,
+      "Pr(>|t|)"
+    ]
+
+
+  # Require BOTH interaction terms to be significant
+  # after Bonferroni correction
+
+  return(
+    all(
+      interaction_p < alpha_adj
+    )
+  )
+}
+
+
+# RUN POWER FOR ONE SAMPLE SIZE AND ICC
+
+run_power = function(
+    N,
+    icc,
+    n_sim = 100,
+    d = 0.24
+) {
+
+  results = replicate(
+    n_sim,
+
+    test_simulation(
+      N = N,
+      icc = icc,
+      d = d
+    )
+  )
+
+
+  # Remove failed simulations
+  results =
+    results[
+      !is.na(results)
+    ]
+
+
+  # Calculate power
+  power =
+    mean(results)
+
+
+  data.frame(
+    N = N,
+    ICC = icc,
+    simulations = length(results),
+    power = power
+  )
+}
+
+# RUN ALL SAMPLE SIZE x ICC COMBINATIONS
+power_results =
+  expand.grid(
+    N = sample_sizes,
+    ICC = icc_grid
+  ) %>%
+
+  purrr::pmap_dfr(
+    function(N, ICC) {
+
+      cat(
+        "Running N =", N,
+        "ICC =", ICC, "\n"
+      )
+
+      run_power(
+        N = N,
+        icc = ICC,
+        n_sim = n_sim,
+        d = d
+      )
+    }
+  )
+
+
+# VIEW POWER RESULTS
+
+power_results =
+  power_results %>%
+  mutate(
+    power = round(power, 3)
+  )
+
+print(power_results)
+
+
+# FIND SMALLEST SAMPLE SIZE WITH 80% POWER
+
+required_N =
+  power_results %>%
+  filter(
+    power >= power_target
+  ) %>%
+  group_by(ICC) %>%
+  summarise(
+    required_N = min(N),
+    power = power[N == min(N)][1],
+    .groups = "drop"
+  )
+
+print(required_N)
+```
+

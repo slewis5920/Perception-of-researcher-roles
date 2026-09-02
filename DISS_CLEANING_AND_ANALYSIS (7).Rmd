@@ -32,6 +32,15 @@ library(lubridate)
 library(lme4)
 library(lmerTest)
 
+# APA-friendly p-value formatting.
+# Moved here (from the later model-helpers chunk) because attribute_model_table,
+# which appears earlier in the document, calls fmt_p() before that chunk runs.
+fmt_p = function(p) {
+  if (is.na(p)) return("")
+  if (p < .001) return("< .001")
+  formatC(p, digits = 3, format = "f")
+}
+
 style_table = function(kbl, footnote_text = NULL, header_above = NULL) {
   if (knitr::is_html_output()) {
     kbl = kableExtra::kable_styling(kbl, full_width = FALSE,
@@ -544,6 +553,176 @@ summary(A2)
 summary(A3)
 summary(A4)
 
+```
+```{r}
+
+model_comparisons = anova(
+  A1,
+  A2,
+  A3,
+  A4,
+  test = "Chisq"
+)
+
+# Create model table
+
+attribute_model_table = data.frame(
+  Model = c(
+    "A1",
+    "A2",
+    "A3",
+    "A4"
+  ),
+
+  Predictors = c(
+    "Researcher + Attribute",
+    "Attribute + QRP Severity",
+    "Researcher + Attribute + QRP Severity",
+    "Researcher × QRP Severity + Attribute"
+  ),
+
+  AIC = c(
+    AIC(A1),
+    AIC(A2),
+    AIC(A3),
+    AIC(A4)
+  ),
+
+  BIC = c(
+    BIC(A1),
+    BIC(A2),
+    BIC(A3),
+    BIC(A4)
+  ),
+
+  LogLik = c(
+    as.numeric(logLik(A1)),
+    as.numeric(logLik(A2)),
+    as.numeric(logLik(A3)),
+    as.numeric(logLik(A4))
+  ),
+
+  Chisq = c(
+    NA,
+    model_comparisons$Chisq[2],
+    model_comparisons$Chisq[3],
+    model_comparisons$Chisq[4]
+  ),
+
+  Df = c(
+    NA,
+    model_comparisons$Df[2],
+    model_comparisons$Df[3],
+    model_comparisons$Df[4]
+  ),
+
+  p = c(
+    NA,
+    model_comparisons$`Pr(>Chisq)`[2],
+    model_comparisons$`Pr(>Chisq)`[3],
+    model_comparisons$`Pr(>Chisq)`[4]
+  )
+)
+
+# Format values
+
+attribute_model_table = attribute_model_table %>%
+  mutate(
+    AIC = sprintf(
+      "%.1f",
+      AIC
+    ),
+
+    BIC = sprintf(
+      "%.1f",
+      BIC
+    ),
+
+    LogLik = sprintf(
+      "%.1f",
+      LogLik
+    ),
+
+    Chisq = ifelse(
+      is.na(Chisq),
+      "",
+      sprintf(
+        "%.2f",
+        Chisq
+      )
+    ),
+
+    Df = ifelse(
+      is.na(Df),
+      "",
+      as.character(Df)
+    ),
+
+    p = sapply(
+      p,
+      function(x) {
+        if (is.na(x)) {
+          ""
+        } else {
+          fmt_p(x)
+        }
+      }
+    )
+  )
+
+# Print table
+
+attribute_model_table %>%
+
+  kable(
+    caption =
+      "Step-Up Model Comparisons for Researcher Attribute Ratings",
+
+    col.names = c(
+      "Model",
+      "Predictors",
+      "AIC",
+      "BIC",
+      "Log Likelihood",
+      "χ²",
+      "Δdf",
+      "p"
+    ),
+
+    align = c(
+      "l",
+      "l",
+      "r",
+      "r",
+      "r",
+      "r",
+      "r",
+      "r"
+    ),
+
+    escape = FALSE
+  ) %>%
+
+  kable_styling(
+    full_width = FALSE,
+    font_size = 11,
+    bootstrap_options =
+      c(
+        "condensed",
+        "bordered"
+      )
+  ) %>%
+
+  footnote(
+    general =
+      "Models were compared using likelihood-ratio tests. All models included random intercepts for participant and vignette. Attribute was sum coded. QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1.",
+
+    general_title =
+      "Note.",
+
+    footnote_as_chunk =
+      TRUE
+  )
 ```
 
 ```{r attribute_descriptives}
@@ -1626,6 +1805,11 @@ trueness_descriptives = trueness_dat %>%
   )
 
 print(trueness_descriptives)
+```
+
+```{r}
+range(trueness_dat$trueness, na.rm = TRUE)
+mean(trueness_dat$trueness, na.rm = TRUE)
 ```
 
 ```{r trueness-model}
@@ -3053,6 +3237,304 @@ trueness_df %>%
       TRUE
   )
 ```
+```{r}
+
+# Model A0
+
+A0 = glmer(
+  chosen ~ attribute +
+    (1 | responseid) +
+    (1 | vignette_id),
+  data = attr_model_dat,
+  family = binomial,
+  control = glmerControl(
+    optimizer = "bobyqa",
+    optCtrl = list(maxfun = 2e5)
+  )
+)
+
+
+# Fixed effects
+
+a0 <- summary(A0)$coefficients
+a1 <- summary(A1)$coefficients
+a2 <- summary(A2)$coefficients
+a3 <- summary(A3)$coefficients
+a4 <- summary(A4)$coefficients
+
+
+# Random effects
+
+a0_vc <- as.data.frame(lme4::VarCorr(A0))
+a1_vc <- as.data.frame(lme4::VarCorr(A1))
+a2_vc <- as.data.frame(lme4::VarCorr(A2))
+a3_vc <- as.data.frame(lme4::VarCorr(A3))
+a4_vc <- as.data.frame(lme4::VarCorr(A4))
+
+
+# Extract variance components
+
+a0_participant_var <- a0_vc$vcov[a0_vc$grp == "responseid"]
+a1_participant_var <- a1_vc$vcov[a1_vc$grp == "responseid"]
+a2_participant_var <- a2_vc$vcov[a2_vc$grp == "responseid"]
+a3_participant_var <- a3_vc$vcov[a3_vc$grp == "responseid"]
+a4_participant_var <- a4_vc$vcov[a4_vc$grp == "responseid"]
+
+a0_vignette_var <- a0_vc$vcov[a0_vc$grp == "vignette_id"]
+a1_vignette_var <- a1_vc$vcov[a1_vc$grp == "vignette_id"]
+a2_vignette_var <- a2_vc$vcov[a2_vc$grp == "vignette_id"]
+a3_vignette_var <- a3_vc$vcov[a3_vc$grp == "vignette_id"]
+a4_vignette_var <- a4_vc$vcov[a4_vc$grp == "vignette_id"]
+
+
+# Residual variance for logistic models
+
+residual_var <- pi^2 / 3
+
+
+# Total variance
+
+a0_total_var <- a0_participant_var + a0_vignette_var + residual_var
+a1_total_var <- a1_participant_var + a1_vignette_var + residual_var
+a2_total_var <- a2_participant_var + a2_vignette_var + residual_var
+a3_total_var <- a3_participant_var + a3_vignette_var + residual_var
+a4_total_var <- a4_participant_var + a4_vignette_var + residual_var
+
+
+# ICCs
+
+a0_participant_icc <- a0_participant_var / a0_total_var
+a1_participant_icc <- a1_participant_var / a1_total_var
+a2_participant_icc <- a2_participant_var / a2_total_var
+a3_participant_icc <- a3_participant_var / a3_total_var
+a4_participant_icc <- a4_participant_var / a4_total_var
+
+a0_vignette_icc <- a0_vignette_var / a0_total_var
+a1_vignette_icc <- a1_vignette_var / a1_total_var
+a2_vignette_icc <- a2_vignette_var / a2_total_var
+a3_vignette_icc <- a3_vignette_var / a3_total_var
+a4_vignette_icc <- a4_vignette_var / a4_total_var
+
+
+# Create table
+
+attribute_df <- data.frame(
+
+  Parameter = c(
+    "Intercept",
+    "Researcher Role",
+    "QRP Severity",
+    "Researcher Role × Severity",
+    "Participant Variance",
+    "Vignette Variance",
+    "Residual Variance",
+    "ICC: Participant",
+    "ICC: Vignette",
+    "AIC",
+    "BIC"
+  ),
+
+  A0_b = c(
+    sprintf("%.2f", a0["(Intercept)", "Estimate"]),
+    "",
+    "",
+    "",
+    sprintf("%.3f", a0_participant_var),
+    sprintf("%.3f", a0_vignette_var),
+    sprintf("%.3f", residual_var),
+    sprintf("%.3f", a0_participant_icc),
+    sprintf("%.3f", a0_vignette_icc),
+    sprintf("%.1f", AIC(A0)),
+    sprintf("%.1f", BIC(A0))
+  ),
+
+  A0_SE = c(
+    sprintf("%.2f", a0["(Intercept)", "Std. Error"]),
+    "", "", "", "", "", "", "", "", "", ""
+  ),
+
+  A0_p = c(
+    fmt_p(a0["(Intercept)", "Pr(>|z|)"]),
+    "", "", "", "", "", "", "", "", "", ""
+  ),
+
+  A1_b = c(
+    sprintf("%.2f", a1["(Intercept)", "Estimate"]),
+    sprintf("%.2f", a1["researcher_ec", "Estimate"]),
+    "",
+    "",
+    sprintf("%.3f", a1_participant_var),
+    sprintf("%.3f", a1_vignette_var),
+    sprintf("%.3f", residual_var),
+    sprintf("%.3f", a1_participant_icc),
+    sprintf("%.3f", a1_vignette_icc),
+    sprintf("%.1f", AIC(A1)),
+    sprintf("%.1f", BIC(A1))
+  ),
+
+  A1_SE = c(
+    sprintf("%.2f", a1["(Intercept)", "Std. Error"]),
+    sprintf("%.2f", a1["researcher_ec", "Std. Error"]),
+    "", "", "", "", "", "", "", "", ""
+  ),
+
+  A1_p = c(
+    fmt_p(a1["(Intercept)", "Pr(>|z|)"]),
+    fmt_p(a1["researcher_ec", "Pr(>|z|)"]),
+    "", "", "", "", "", "", "", "", ""
+  ),
+
+  A2_b = c(
+    sprintf("%.2f", a2["(Intercept)", "Estimate"]),
+    "",
+    sprintf("%.2f", a2["severity_num", "Estimate"]),
+    "",
+    sprintf("%.3f", a2_participant_var),
+    sprintf("%.3f", a2_vignette_var),
+    sprintf("%.3f", residual_var),
+    sprintf("%.3f", a2_participant_icc),
+    sprintf("%.3f", a2_vignette_icc),
+    sprintf("%.1f", AIC(A2)),
+    sprintf("%.1f", BIC(A2))
+  ),
+
+  A2_SE = c(
+    sprintf("%.2f", a2["(Intercept)", "Std. Error"]),
+    "",
+    sprintf("%.2f", a2["severity_num", "Std. Error"]),
+    "", "", "", "", "", "", "", ""
+  ),
+
+  A2_p = c(
+    fmt_p(a2["(Intercept)", "Pr(>|z|)"]),
+    "",
+    fmt_p(a2["severity_num", "Pr(>|z|)"]),
+    "", "", "", "", "", "", "", ""
+  ),
+
+  A3_b = c(
+    sprintf("%.2f", a3["(Intercept)", "Estimate"]),
+    sprintf("%.2f", a3["researcher_ec", "Estimate"]),
+    sprintf("%.2f", a3["severity_num", "Estimate"]),
+    "",
+    sprintf("%.3f", a3_participant_var),
+    sprintf("%.3f", a3_vignette_var),
+    sprintf("%.3f", residual_var),
+    sprintf("%.3f", a3_participant_icc),
+    sprintf("%.3f", a3_vignette_icc),
+    sprintf("%.1f", AIC(A3)),
+    sprintf("%.1f", BIC(A3))
+  ),
+
+  A3_SE = c(
+    sprintf("%.2f", a3["(Intercept)", "Std. Error"]),
+    sprintf("%.2f", a3["researcher_ec", "Std. Error"]),
+    sprintf("%.2f", a3["severity_num", "Std. Error"]),
+    "", "", "", "", "", "", "", ""
+  ),
+
+  A3_p = c(
+    fmt_p(a3["(Intercept)", "Pr(>|z|)"]),
+    fmt_p(a3["researcher_ec", "Pr(>|z|)"]),
+    fmt_p(a3["severity_num", "Pr(>|z|)"]),
+    "", "", "", "", "", "", "", ""
+  ),
+
+  A4_b = c(
+    sprintf("%.2f", a4["(Intercept)", "Estimate"]),
+    sprintf("%.2f", a4["researcher_ec", "Estimate"]),
+    sprintf("%.2f", a4["severity_num", "Estimate"]),
+    sprintf("%.2f", a4["researcher_ec:severity_num", "Estimate"]),
+    sprintf("%.3f", a4_participant_var),
+    sprintf("%.3f", a4_vignette_var),
+    sprintf("%.3f", residual_var),
+    sprintf("%.3f", a4_participant_icc),
+    sprintf("%.3f", a4_vignette_icc),
+    sprintf("%.1f", AIC(A4)),
+    sprintf("%.1f", BIC(A4))
+  ),
+
+  A4_SE = c(
+    sprintf("%.2f", a4["(Intercept)", "Std. Error"]),
+    sprintf("%.2f", a4["researcher_ec", "Std. Error"]),
+    sprintf("%.2f", a4["severity_num", "Std. Error"]),
+    sprintf("%.2f", a4["researcher_ec:severity_num", "Std. Error"]),
+    "", "", "", "", "", "", ""
+  ),
+
+  A4_p = c(
+    fmt_p(a4["(Intercept)", "Pr(>|z|)"]),
+    fmt_p(a4["researcher_ec", "Pr(>|z|)"]),
+    fmt_p(a4["severity_num", "Pr(>|z|)"]),
+    fmt_p(a4["researcher_ec:severity_num", "Pr(>|z|)"]),
+    "", "", "", "", "", "", ""
+  ),
+
+  stringsAsFactors = FALSE
+)
+
+
+# Print table
+
+attribute_df %>%
+
+  kable(
+    caption =
+      "Table X. Step-Up GLMM Results for Researcher Attributes",
+
+    col.names = c(
+      "Parameter",
+      "b", "SE", "p",
+      "b", "SE", "p",
+      "b", "SE", "p",
+      "b", "SE", "p",
+      "b", "SE", "p"
+    ),
+
+    align = c(
+      "l",
+      "r", "r", "r",
+      "r", "r", "r",
+      "r", "r", "r",
+      "r", "r", "r",
+      "r", "r", "r"
+    ),
+
+    escape = FALSE
+  ) %>%
+
+  add_header_above(
+    c(
+      " " = 1,
+      "MODEL A0" = 3,
+      "MODEL A1 (H1a)" = 3,
+      "MODEL A2" = 3,
+      "MODEL A3" = 3,
+      "MODEL A4 (H1b)" = 3
+    )
+  ) %>%
+
+  kable_styling(
+    full_width = FALSE,
+    font_size = 11,
+    bootstrap_options =
+      c(
+        "condensed",
+        "bordered"
+      )
+  ) %>%
+
+  footnote(
+    general =
+      "Researcher Role was effect coded as investigator = −1 and inspector = 1. QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1. Attribute was sum coded and included as a control variable in all models. Residual variance for the binomial models was fixed at π²/3. * p < .05. ** p < .01. *** p < .001.",
+
+    general_title =
+      "Note.",
+
+    footnote_as_chunk =
+      TRUE
+  )
+```
 
 ```{r random-effects-reporting}
 cat("\n--- Integrity random effects ---\n")
@@ -3068,9 +3550,9 @@ print(get_variance_components(FT1))
 print(get_random_intercept_icc(FT1))
 ```
 
-#CFA
+#EFA
 
-```{r CFA}
+```{r EFA}
 # Load packages
 library(dplyr)
 library(tidyr)
@@ -3307,4 +3789,220 @@ invariance_fit_table <- rbind(
 
 cat("\n================ INVARIANCE FIT TABLE ================\n")
 print(round(invariance_fit_table, 3))
+```
+```{r}
+# ============================================================
+# 10. Create publication-ready measurement invariance table
+# ============================================================
+
+library(knitr)
+library(kableExtra)
+
+# Extract fit statistics
+invariance_table <- data.frame(
+  Model = c("Configural", "Metric", "Scalar"),
+  
+  Chi_Square = c(
+    fitMeasures(configural, "chisq"),
+    fitMeasures(metric, "chisq"),
+    fitMeasures(scalar, "chisq")
+  ),
+  
+  df = c(
+    fitMeasures(configural, "df"),
+    fitMeasures(metric, "df"),
+    fitMeasures(scalar, "df")
+  ),
+  
+  CFI = c(
+    fitMeasures(configural, "cfi"),
+    fitMeasures(metric, "cfi"),
+    fitMeasures(scalar, "cfi")
+  ),
+  
+  TLI = c(
+    fitMeasures(configural, "tli"),
+    fitMeasures(metric, "tli"),
+    fitMeasures(scalar, "tli")
+  ),
+  
+  RMSEA = c(
+    fitMeasures(configural, "rmsea"),
+    fitMeasures(metric, "rmsea"),
+    fitMeasures(scalar, "rmsea")
+  ),
+  
+  SRMR = c(
+    fitMeasures(configural, "srmr"),
+    fitMeasures(metric, "srmr"),
+    fitMeasures(scalar, "srmr")
+  )
+)
+
+# Add change in fit indices
+invariance_table$Delta_CFI <- c(
+  NA,
+  invariance_table$CFI[2] - invariance_table$CFI[1],
+  invariance_table$CFI[3] - invariance_table$CFI[2]
+)
+
+invariance_table$Delta_RMSEA <- c(
+  NA,
+  invariance_table$RMSEA[2] - invariance_table$RMSEA[1],
+  invariance_table$RMSEA[3] - invariance_table$RMSEA[2]
+)
+
+# Round values
+invariance_table <- invariance_table %>%
+  mutate(
+    Chi_Square = round(Chi_Square, 2),
+    CFI = round(CFI, 3),
+    TLI = round(TLI, 3),
+    RMSEA = round(RMSEA, 3),
+    SRMR = round(SRMR, 3),
+    Delta_CFI = round(Delta_CFI, 3),
+    Delta_RMSEA = round(Delta_RMSEA, 3)
+  )
+
+# Display table
+kable(
+  invariance_table,
+  format = "html",
+  caption = "Measurement Invariance Across Researcher Role"
+) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+)
+```
+```{r}
+# ============================================================
+# FIGURE: One-Factor vs. Two-Factor Model Fit
+# Investigator vs. Inspector
+# ============================================================
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Create model comparison data
+model_comparison <- data.frame(
+  Role = rep(c("Investigator", "Inspector"), each = 2),
+  Model = rep(c("One Factor", "Two Factors"), 2),
+
+  CFI = c(
+    fitMeasures(investigator_one, "cfi"),
+    fitMeasures(investigator_two, "cfi"),
+    fitMeasures(inspector_one, "cfi"),
+    fitMeasures(inspector_two, "cfi")
+  ),
+
+  RMSEA = c(
+    fitMeasures(investigator_one, "rmsea"),
+    fitMeasures(investigator_two, "rmsea"),
+    fitMeasures(inspector_one, "rmsea"),
+    fitMeasures(inspector_two, "rmsea")
+  )
+)
+
+# Set order
+model_comparison$Model <- factor(
+  model_comparison$Model,
+  levels = c("One Factor", "Two Factors")
+)
+
+# Convert to long format
+plot_data <- model_comparison %>%
+  pivot_longer(
+    cols = c(CFI, RMSEA),
+    names_to = "Fit_Index",
+    values_to = "Value"
+  )
+
+# ============================================================
+# Plot
+# ============================================================
+
+ggplot(
+  plot_data,
+  aes(
+    x = Model,
+    y = Value,
+    group = Role,
+    color = Role
+  )
+) +
+
+  # Lines
+  geom_line(linewidth = 1.2) +
+
+  # Points
+  geom_point(size = 4) +
+
+  # Value labels
+  geom_text(
+    aes(
+      label = sprintf("%.3f", Value),
+      vjust = ifelse(
+        Model == "One Factor",
+        1.7,
+        -1.2
+      )
+    ),
+    size = 4,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+
+  # Separate panels for CFI and RMSEA
+  facet_wrap(
+    ~ Fit_Index,
+    scales = "free_y"
+  ) +
+
+  # Labels
+  labs(
+    title = "Two-Factor Model Provides Better Fit",
+    subtitle = "Model fit for Investigator and Inspector ratings",
+    x = NULL,
+    y = "Fit Index",
+    color = "Researcher Role"
+  ) +
+
+  # Colors
+  scale_color_manual(
+    values = c(
+      "Investigator" = "#2166AC",
+      "Inspector" = "#D73027"
+    )
+  ) +
+
+  # Theme
+  theme_classic(base_size = 14) +
+
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 18
+    ),
+
+    plot.subtitle = element_text(
+      size = 13
+    ),
+
+    strip.text = element_text(
+      face = "bold",
+      size = 14
+    ),
+
+    legend.position = "bottom",
+
+    legend.title = element_text(
+      face = "bold"
+    ),
+
+    legend.text = element_text(
+      size = 12
+    )
+  )
 ```

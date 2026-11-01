@@ -1347,10 +1347,10 @@ integrity_models = list(
 
 integrity_model_names = c(
   "Model 0: Null",
-  "Model 1: Role",
-  "Model 2: QRP Severity",
-  "Model 3: Role + QRP Severity",
-  "Model 4: Role × QRP Severity"
+  "Model 1a: Role",
+  "Model 1b: QRP Severity",
+  "Model 1c: Role + QRP Severity",
+  "Model 1d: Role × QRP Severity"
 )
 
 integrity_fit = model_fit_table(
@@ -1541,9 +1541,7 @@ cat(
 ###step-up models
 
 ```{r likeability-final-models}
-# ------------------------------------------------------------
-# Fit Models 0–4 using ONE identical random-effects structure.
-# ------------------------------------------------------------
+
 
 if (likeability_uses_vignette_term) {
 
@@ -1645,10 +1643,10 @@ likeability_models = list(
 
 likeability_model_names = c(
   "Model 0: Null",
-  "Model 1: Role",
-  "Model 2: QRP Severity",
-  "Model 3: Role + QRP Severity",
-  "Model 4: Role × QRP Severity"
+  "Model 2a: Role",
+  "Model 2b: QRP Severity",
+  "Model 2c: Role + QRP Severity",
+  "Model 2d: Role × QRP Severity"
 )
 
 likeability_fit = model_fit_table(
@@ -2098,10 +2096,10 @@ fit_table(
     T4
   ),
   c(
-    "M1: Role",
-    "M2: Severity",
-    "M3: Role + Severity",
-    "M4: Role × Severity"
+    "M1a: Role",
+    "M1b: Severity",
+    "M1c: Role + Severity",
+    "M1d: Role × Severity"
   )
 ) %>%
 
@@ -2196,10 +2194,10 @@ fit_table(
     L4
   ),
   c(
-    "M1: Role",
-    "M2: Severity",
-    "M3: Role + Severity",
-    "M4: Role × Severity"
+    "M2a: Role",
+    "M2b: Severity",
+    "M2c: Role + Severity",
+    "M2d: Role × Severity"
   )
 ) %>%
 

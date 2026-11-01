@@ -432,9 +432,9 @@ attr_model_dat = attr_long2 %>%
       -1
     ),
     severity_num = case_when(
-      severity == "minor" ~ -1,
-      severity == "moderate" ~ 0,
-      severity == "major" ~ 1
+      severity == "minor" ~ 0,
+      severity == "moderate" ~ 1,
+      severity == "major" ~ 2
     ),
     responseid = factor(responseid),
     researcher = factor(
@@ -938,9 +938,9 @@ tl_dat = tl_rows %>%
     # effect-coded predictors
     role_ec    = if_else(role == "inspector", 1, -1),
     severity_num = case_when(
-      severity == "minor"    ~ -1,
-      severity == "moderate" ~  0,
-      severity == "major"    ~  1
+      severity == "minor" ~ 0,
+      severity == "moderate" ~ 1,
+      severity == "major" ~ 2
     )
   )
 
@@ -1388,13 +1388,13 @@ print(integrity_fixed_effects)
 emm_Integrity = emmeans(
   T4,
   ~ role_ec | severity_num,
-  at = list(severity_num = c(-1, 0, 1))
+  at = list(severity_num = c(0,1,2))
 )
 
 emm_Integrity_role = emmeans(
   T4,
   pairwise ~ role_ec | severity_num,
-  at = list(severity_num = c(-1, 0, 1)),
+  at = list(severity_num = c(0,1,2)),
   adjust = "bonferroni"
 )
 
@@ -1416,7 +1416,7 @@ emm_Integrity_df = as.data.frame(
   emmeans(
     T4,
     ~ role_ec * severity_num,
-    at = list(severity_num = c(-1, 0, 1))
+    at = list(severity_num = c(0,1,2))
   )
 ) %>%
   mutate(
@@ -1427,7 +1427,7 @@ emm_Integrity_df = as.data.frame(
     ),
     Severity = factor(
       severity_num,
-      levels = c(-1, 0, 1),
+      levels = c(0,1,2),
       labels = c("Minor", "Moderate", "Major")
     )
   )
@@ -1475,9 +1475,7 @@ more likeable than investigators.
 ###Random-effects structure for Likeability
 
 ```{r likeability-random-effects}
-# ------------------------------------------------------------
-# Maximal participant-level structure
-# ------------------------------------------------------------
+
 L4_max1 = lmer(
   likeability ~ role_ec * severity_num +
     (1 + role_ec * severity_num | responseid),
@@ -1684,7 +1682,7 @@ print(likeability_fixed_effects)
 emm_like_role = emmeans(
   L4,
   pairwise ~ role_ec | severity_num,
-  at = list(severity_num = c(-1, 0, 1)),
+  at = list(severity_num = c(0,1,2)),
   adjust = "bonferroni"
 )
 
@@ -1696,7 +1694,7 @@ eff_size(
   emmeans(
     L4,
     ~ role_ec | severity_num,
-    at = list(severity_num = c(-1, 0, 1))
+    at = list(severity_num = c(0,1,2))
   ),
   sigma = sigma(L4),
   edf = df.residual(L4)
@@ -1710,7 +1708,7 @@ emm_like_df = as.data.frame(
   emmeans(
     L4,
     ~ role_ec * severity_num,
-    at = list(severity_num = c(-1, 0, 1))
+    at = list(severity_num = c(0,1,2))
   )
 ) %>%
   mutate(
@@ -1721,7 +1719,7 @@ emm_like_df = as.data.frame(
     ),
     Severity = factor(
       severity_num,
-      levels = c(-1, 0, 1),
+      levels = c(0,1,2),
       labels = c("Minor", "Moderate", "Major")
     )
   )
@@ -1785,9 +1783,9 @@ trueness_dat = filtered_by_age %>%
       levels = c("minor", "moderate", "major")
     ),
     severity_num = case_when(
-      severity == "minor" ~ -1,
-      severity == "moderate" ~ 0,
-      severity == "major" ~ 1
+      severity == "minor" ~ 0,
+      severity == "moderate" ~ 1,
+      severity == "major" ~ 2
     ),
     responseid = factor(responseid),
     trueness_c = trueness - 3
@@ -1836,7 +1834,7 @@ print(trueness_fixed_effects)
 emm_trueness = emmeans(
   FT1,
   pairwise ~ severity_num,
-  at = list(severity_num = c(-1, 0, 1)),
+  at = list(severity_num = c(0,1,2)),
   adjust = "bonferroni"
 )
 
@@ -1847,7 +1845,7 @@ eff_size(
   emmeans(
     FT1,
     ~ severity_num,
-    at = list(severity_num = c(-1, 0, 1))
+    at = list(severity_num = c(0,1,2))
   ),
   sigma = sigma(FT1),
   edf = df.residual(FT1)
@@ -1861,13 +1859,13 @@ emm_true_df = as.data.frame(
   emmeans(
     FT1,
     ~ severity_num,
-    at = list(severity_num = c(-1, 0, 1))
+    at = list(severity_num = c(0,1,2))
   )
 ) %>%
   mutate(
     Severity = factor(
       severity_num,
-      levels = c(-1, 0, 1),
+      levels = c(0,1,2),
       labels = c("Minor", "Moderate", "Major")
     )
   )
@@ -2184,7 +2182,7 @@ fe_table(T4) %>%
 
   footnote(
     general =
-      "Role: inspector = 1, investigator = −1. QRP Severity: minor = −1, moderate = 0, major = 1."
+      "Role: inspector = 1, investigator = −1. QRP Severity: minor = 0, moderate = 1, major = 2."
   )
 
 
@@ -2285,7 +2283,7 @@ fe_table(L4) %>%
 
   footnote(
     general =
-      "Role: inspector = 1, investigator = −1. QRP Severity: minor = −1, moderate = 0, major = 1."
+      "Role: inspector = 1, investigator = −1. QRP Severity: minor = 0, moderate = 1, major = 2."
   )
 
 
@@ -2340,7 +2338,7 @@ fe_table(FT1) %>%
 
   footnote(
     general =
-      "Trueness centered at 3 (neutral midpoint). QRP Severity: minor = −1, moderate = 0, major = 1."
+      "Trueness centered at 3 (neutral midpoint). QRP Severity: minor = 0, moderate = 1, major = 2."
   )
 ```
 
@@ -3040,7 +3038,7 @@ make_stepup_table(
     "Table 8. Step-Up MLM Results for Integrity Ratings",
 
   footnote_text =
-    "Role was effect coded as inspector = 1 and investigator = −1. QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1. Model comparison χ² values are likelihood-ratio tests comparing each model with the preceding model. * p < .05. ** p < .01. *** p < .001."
+    "Role was effect coded as inspector = 1 and investigator = −1. QRP Severity: minor = 0, moderate = 1, major = 2. Model comparison χ² values are likelihood-ratio tests comparing each model with the preceding model. * p < .05. ** p < .01. *** p < .001."
 )
 
 
@@ -3058,7 +3056,7 @@ make_stepup_table(
     "Table 9. Step-Up MLM Results for Likeability Ratings",
 
   footnote_text =
-    "Role was effect coded as inspector = 1 and investigator = −1. QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1. Model comparison χ² values are likelihood-ratio tests comparing each model with the preceding model. * p < .05. ** p < .01. *** p < .001."
+    "Role was effect coded as inspector = 1 and investigator = −1. QRP Severity: minor = 0, moderate = 1, major = 2. Model comparison χ² values are likelihood-ratio tests comparing each model with the preceding model. * p < .05. ** p < .01. *** p < .001."
 )
 ```
 
@@ -3228,7 +3226,7 @@ trueness_df %>%
 
   footnote(
     general =
-      "Trueness was centered at 3 (neutral). QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1. * p < .05. ** p < .01. *** p < .001.",
+      "Trueness was centered at 3 (neutral). QRP Severity: minor = 0, moderate = 1, major = 2. * p < .05. ** p < .01. *** p < .001.",
 
     general_title =
       "Note.",
@@ -3526,7 +3524,7 @@ attribute_df %>%
 
   footnote(
     general =
-      "Researcher Role was effect coded as investigator = −1 and inspector = 1. QRP Severity was effect coded as minor = −1, moderate = 0, and major = 1. Attribute was sum coded and included as a control variable in all models. Residual variance for the binomial models was fixed at π²/3. * p < .05. ** p < .01. *** p < .001.",
+      "Researcher Role was effect coded as investigator = −1 and inspector = 1. QRP Severity: minor = 0, moderate = 1, major = 2. Attribute was sum coded and included as a control variable in all models. Residual variance for the binomial models was fixed at π²/3. * p < .05. ** p < .01. *** p < .001.",
 
     general_title =
       "Note.",
@@ -3668,9 +3666,8 @@ anova(
 )
 
 
-# ============================================================
 # 6. Create easy-to-read fit table
-# ============================================================
+
 
 fit_table <- rbind(
   Investigator_1Factor = fitMeasures(
@@ -3698,9 +3695,8 @@ cat("\n================ FIT TABLE ================\n")
 print(round(fit_table, 3))
 
 
-# ============================================================
 # 7. Measurement invariance across researcher role
-# ============================================================
+
 # ONLY run/interpret this section if the two-factor model
 # provides a reasonable fit.
 #
@@ -3791,9 +3787,9 @@ cat("\n================ INVARIANCE FIT TABLE ================\n")
 print(round(invariance_fit_table, 3))
 ```
 ```{r}
-# ============================================================
+
 # 10. Create publication-ready measurement invariance table
-# ============================================================
+
 
 library(knitr)
 library(kableExtra)
@@ -3876,10 +3872,10 @@ kable(
 )
 ```
 ```{r}
-# ============================================================
+
 # FIGURE: One-Factor vs. Two-Factor Model Fit
 # Investigator vs. Inspector
-# ============================================================
+
 
 library(ggplot2)
 library(dplyr)
@@ -3919,9 +3915,7 @@ plot_data <- model_comparison %>%
     values_to = "Value"
   )
 
-# ============================================================
 # Plot
-# ============================================================
 
 ggplot(
   plot_data,
@@ -4006,3 +4000,116 @@ ggplot(
     )
   )
 ```
+
+```{r}
+# Install afex if it is not already installed
+if (!requireNamespace("afex", quietly = TRUE)) {
+  install.packages("afex")
+}
+
+# Load package
+library(afex)
+```
+
+
+#exploratory anovas
+
+#INTEGRITYANOVA
+```{r}
+#Exploratory ANOVAs: Severity as categorical
+
+# INTEGRITY ANOVA
+# Role = within-subjects
+# Severity = within-subjects
+
+integrity_anova_dat = tl_dat %>%
+  mutate(
+    Role = factor(
+      role,
+      levels = c("investigator", "inspector"),
+      labels = c("Investigator", "Inspector")
+    ),
+    Severity = factor(
+      severity_num,
+      levels = c(0, 1, 2),
+      labels = c("Minor", "Moderate", "Major")
+    ),
+    Participant = factor(responseid)
+  )
+
+integrity_rm_anova = aov_ez(
+  id = "Participant",
+  dv = "Integrity",
+  data = integrity_anova_dat,
+  within = c("Role", "Severity"),
+  type = 3,
+  fun_aggregate = mean
+)
+
+integrity_rm_anova
+```
+
+
+#LIKEABILITYANOVA
+```{r}
+# LIKEABILITY ANOVA
+# Role = within-subjects
+# Severity = within-subjects
+
+
+like_anova_dat <- model.frame(L4) %>%
+  mutate(
+    Role = factor(
+      role_ec,
+      levels = c(-1, 1),
+      labels = c("Investigator", "Inspector")
+    ),
+    Severity = factor(
+      severity_num,
+      levels = c(0, 1, 2),
+      labels = c("Minor", "Moderate", "Major")
+    ),
+    Participant = factor(responseid)
+  )
+
+like_rm_anova <- aov_ez(
+  id = "Participant",
+  dv = "likeability",
+  data = like_anova_dat,
+  within = c("Role", "Severity"),
+  type = 3,
+  fun_aggregate = mean
+)
+
+like_rm_anova
+```
+
+#TRUENESSANOVA
+```{r}
+
+# TRUENESS ANOVA
+# Severity = within-subjects
+
+
+trueness_anova_dat <- trueness_dat %>%
+  mutate(
+    Severity = factor(
+      severity_num,
+      levels = c(0, 1, 2),
+      labels = c("Minor", "Moderate", "Major")
+    ),
+    Participant = factor(responseid)
+  )
+
+trueness_rm_anova <- aov_ez(
+  id = "Participant",
+  dv = "trueness",
+  data = trueness_anova_dat,
+  within = "Severity",
+  type = 3,
+  fun_aggregate = mean
+)
+
+trueness_rm_anova
+```
+

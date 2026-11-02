@@ -4111,3 +4111,123 @@ trueness_rm_anova <- aov_ez(
 trueness_rm_anova
 ```
 
+```{r}
+### Raw means for Integrity and Likeability
+
+plot_raw_means = function(data, outcome, outcome_label) {
+
+  raw_df = data %>%
+    group_by(role, severity_num) %>%
+    summarise(
+      n = sum(!is.na(.data[[outcome]])),
+      mean = mean(.data[[outcome]], na.rm = TRUE),
+      sd = sd(.data[[outcome]], na.rm = TRUE),
+      se = sd / sqrt(n),
+      lower.CL = mean - qt(0.975, df = n - 1) * se,
+      upper.CL = mean + qt(0.975, df = n - 1) * se,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      Severity = factor(
+        severity_num,
+        levels = c(0, 1, 2),
+        labels = c("Minor", "Moderate", "Major")
+      ),
+      Role = factor(
+        role,
+        levels = c("investigator", "inspector"),
+        labels = c("Investigator", "Inspector")
+      )
+    )
+
+  ggplot(
+    raw_df,
+    aes(
+      x = Severity,
+      y = mean,
+      color = Role,
+      group = Role
+    )
+  ) +
+    geom_line(linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 3, position = position_dodge(width = 0.2)) +
+    geom_errorbar(
+      aes(ymin = lower.CL, ymax = upper.CL),
+      width = 0.15,
+      position = position_dodge(width = 0.2)
+    ) +
+    scale_color_manual(
+      values = c(
+        "Investigator" = "#E53935",
+        "Inspector" = "#2196F3"
+      )
+    ) +
+    labs(
+      title = paste("Mean", outcome_label, "by Role and QRP Severity"),
+      y = paste("Mean", outcome_label),
+      x = "QRP Severity",
+      color = "Researcher Role"
+    ) +
+    theme_minimal(base_size = 13) +
+    coord_cartesian(ylim = c(1, 5))
+}
+
+# Integrity
+plot_raw_means(tl_dat, "Integrity", "Integrity")
+
+# Likeability
+plot_raw_means(tl_dat, "likeability", "Likeability")
+
+```
+
+```{r}
+### Raw means for Trueness
+
+plot_raw_trueness = function(data) {
+
+  raw_df = data %>%
+    group_by(severity_num) %>%
+    summarise(
+      n = sum(!is.na(trueness)),
+      mean = mean(trueness, na.rm = TRUE),
+      sd = sd(trueness, na.rm = TRUE),
+      se = sd / sqrt(n),
+      lower.CL = mean - qt(0.975, df = n - 1) * se,
+      upper.CL = mean + qt(0.975, df = n - 1) * se,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      Severity = factor(
+        severity_num,
+        levels = c(0, 1, 2),
+        labels = c("Minor", "Moderate", "Major")
+      )
+    )
+
+  ggplot(
+    raw_df,
+    aes(
+      x = Severity,
+      y = mean,
+      group = 1
+    )
+  ) +
+    geom_line(linewidth = 1, color = "#7B1FA2") +
+    geom_point(size = 3, color = "#7B1FA2") +
+    geom_errorbar(
+      aes(ymin = lower.CL, ymax = upper.CL),
+      width = 0.15,
+      color = "#7B1FA2"
+    ) +
+    labs(
+      title = "Mean Trueness by QRP Severity",
+      y = "Mean Trueness",
+      x = "QRP Severity"
+    ) +
+    theme_minimal(base_size = 13) +
+    coord_cartesian(ylim = c(1, 5))
+}
+
+plot_raw_trueness(trueness_dat)
+```
+
